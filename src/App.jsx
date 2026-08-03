@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
 
 const CommandCenter = () => {
   const [formData, setFormData] = useState({
@@ -19,7 +20,20 @@ const CommandCenter = () => {
     const savedTrades = localStorage.getItem('activeTrades');
     if (savedTrades) {
       try {
-        setActiveTrades(JSON.parse(savedTrades));
+        const parsedTrades = JSON.parse(savedTrades);
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const todaysTrades = parsedTrades.filter(trade => {
+          const tradeDate = new Date(trade.timestamp);
+          return tradeDate >= startOfDay;
+        });
+
+        setActiveTrades(todaysTrades);
+
+        if (todaysTrades.length !== parsedTrades.length) {
+          localStorage.setItem('activeTrades', JSON.stringify(todaysTrades));
+        }
       } catch (e) {
         console.error("Could not parse saved trades", e);
       }
@@ -139,12 +153,40 @@ const CommandCenter = () => {
       if (formData.orderPrice) entry = formData.orderPrice;
       else if (formData.triggerPrice) entry = formData.triggerPrice;
 
+      // --- Record trade signal in Supabase ---
+      const { data: dbRecord, error: dbError } = await supabase
+        .from('trade_history')
+        .insert([
+          {
+            pair_name: formData.pair.toUpperCase(),
+            order_type: formData.orderType,
+            order_price: formData.orderPrice ? parseFloat(formData.orderPrice) : null,
+            stop_loss_price: formData.stopLoss ? parseFloat(formData.stopLoss) : null,
+            take_profit_price: formData.takeProfit ? parseFloat(formData.takeProfit) : null,
+            trigger_price: formData.triggerPrice ? parseFloat(formData.triggerPrice) : null,
+            notes: formData.notes || null,
+            status: 'ACTIVE',
+            is_active: true,
+          },
+        ])
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Supabase insert error:', dbError);
+        setAlert({ show: true, message: `Supabase error: ${dbError.message}`, type: 'error' });
+        setIsLoading(false);
+        return;
+      }
+
       const newTrade = {
         id: messageId,
+        supabaseId: dbRecord?.id ?? null,
         pair: formData.pair.toUpperCase(),
         orderType: formData.orderType,
         entry: entry,
         timestamp: new Date().toISOString(),
+        status: 'ACTIVE',
         originalEmbed: embed,
       };
 
@@ -178,7 +220,6 @@ const CommandCenter = () => {
 
     let color;
     let statusText;
-    let isClosed = false;
 
     switch (actionType) {
       case 'TRIGGERED':
@@ -188,17 +229,14 @@ const CommandCenter = () => {
       case 'TP':
         color = 15844367; // Gold
         statusText = "🏆 TAKE PROFIT HIT - Trade Closed";
-        isClosed = true;
         break;
       case 'SL':
         color = 15548997; // Red
         statusText = "🛑 STOP LOSS HIT - Trade Closed";
-        isClosed = true;
         break;
       case 'CLOSE':
         color = 9807270; // Gray
         statusText = "⚠️ MANUALLY CLOSED - Intervened";
-        isClosed = true;
         break;
       default:
         return;
@@ -238,20 +276,76 @@ const CommandCenter = () => {
         throw new Error(`Failed to update message: ${response.status}`);
       }
 
-      if (isClosed) {
-        // Remove from state and localStorage
-        const newTrades = activeTrades.filter(t => t.id !== trade.id);
-        saveTrades(newTrades);
-      } else {
-        // Update trade with new embed so subsequent updates preserve it (or keep original base)
-        const updatedTrade = { ...trade, originalEmbed: updatedEmbed };
-        const newTrades = activeTrades.map(t => t.id === trade.id ? updatedTrade : t);
-        saveTrades(newTrades);
+      // --- Sync status to Supabase ---
+      if (trade.supabaseId) {
+        const statusMap = {
+          TRIGGERED: 'TRIGGERED',
+          TP: 'TP_HIT',
+          SL: 'SL_HIT',
+          CLOSE: 'MANUALLY_CLOSED',
+        };
+        
+        const updatePayload = {
+          status: statusMap[actionType],
+          updated_at: new Date().toISOString(),
+        };
+        
+        if (actionType === 'TRIGGERED') {
+          updatePayload.triggered_at = new Date().toISOString();
+        }
+
+        const { error: updateError } = await supabase
+          .from('trade_history')
+          .update(updatePayload)
+          .eq('id', trade.supabaseId);
+
+        if (updateError) {
+          console.error('Supabase update error:', updateError);
+        }
       }
+
+      // Update trade with new embed so subsequent updates preserve it
+      const updatedTrade = { ...trade, originalEmbed: updatedEmbed, status: actionType };
+      const newTrades = activeTrades.map(t => t.id === trade.id ? updatedTrade : t);
+      saveTrades(newTrades);
     } catch (error) {
       console.error(error);
       alert('Failed to update the trade on Discord.');
     }
+  };
+
+  const handleToggleActive = async (trade) => {
+    const newIsClosed = !trade.isClosed;
+    
+    // Update Supabase
+    if (trade.supabaseId) {
+      const updatePayload = {
+        is_active: !newIsClosed,
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (newIsClosed) {
+        updatePayload.settled_at = new Date().toISOString();
+      } else {
+        updatePayload.settled_at = null;
+      }
+
+      const { error: updateError } = await supabase
+        .from('trade_history')
+        .update(updatePayload)
+        .eq('id', trade.supabaseId);
+        
+      if (updateError) {
+        console.error('Supabase update error:', updateError);
+        alert('Failed to update status in database.');
+        return;
+      }
+    }
+    
+    // Update local state
+    const updatedTrade = { ...trade, isClosed: newIsClosed };
+    const newTrades = activeTrades.map(t => t.id === trade.id ? updatedTrade : t);
+    saveTrades(newTrades);
   };
 
   return (
@@ -430,9 +524,9 @@ const CommandCenter = () => {
         {/* Active Trades Panel */}
         <div className="lg:col-span-7 bg-[#14161a] border border-[#23262e] rounded-lg shadow-2xl p-6 sm:p-8 self-start overflow-hidden">
           <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#23262e]">
-            <h2 className="text-xl font-bold tracking-wider text-white uppercase">Active Trades</h2>
+            <h2 className="text-xl font-bold tracking-wider text-white uppercase">Today's Trades</h2>
             <span className="text-xs bg-[#23262e] px-3 py-1 rounded-full font-mono text-gray-300">
-              {activeTrades.length} Active
+              {activeTrades.length} Total
             </span>
           </div>
 
@@ -441,7 +535,7 @@ const CommandCenter = () => {
               <svg className="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <p className="text-sm">No active trades currently open.</p>
+              <p className="text-sm">No trades added today.</p>
             </div>
           ) : (
             <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
@@ -461,35 +555,58 @@ const CommandCenter = () => {
                         Entry: {trade.entry} &bull; {new Date(trade.timestamp).toLocaleTimeString()}
                       </div>
                     </div>
+                    <button
+                      onClick={() => handleToggleActive(trade)}
+                      className={`text-[10px] px-2 py-1 rounded font-bold tracking-wider transition-colors uppercase ${
+                        trade.isClosed 
+                          ? 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-600' 
+                          : 'bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-500/30'
+                      }`}
+                    >
+                      {trade.isClosed ? 'Inactive' : 'Active'}
+                    </button>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <button
-                      onClick={() => handleUpdateTrade(trade, 'TRIGGERED')}
-                      className="bg-blue-900/20 hover:bg-blue-900/40 border border-blue-500/30 text-blue-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
-                    >
-                      Triggered
-                    </button>
-                    <button
-                      onClick={() => handleUpdateTrade(trade, 'TP')}
-                      className="bg-yellow-900/20 hover:bg-yellow-900/40 border border-yellow-500/30 text-yellow-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
-                    >
-                      TP Hit
-                    </button>
-                    <button
-                      onClick={() => handleUpdateTrade(trade, 'SL')}
-                      className="bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
-                    >
-                      SL Hit
-                    </button>
-                    <button
-                      onClick={() => handleUpdateTrade(trade, 'CLOSE')}
-                      className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
-                    >
-                      Close Manual
-                    </button>
-                  </div>
+                  {trade.isClosed ? (
+                    <div className="bg-[#1c1e24] border border-[#23262e] rounded p-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Trade Inactive
+                    </div>
+                  ) : (
+                    <div className={`grid gap-2 ${trade.status !== 'ACTIVE' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1'}`}>
+                      <button
+                        onClick={() => handleUpdateTrade(trade, 'TRIGGERED')}
+                        disabled={trade.status !== 'ACTIVE'}
+                        className={`bg-blue-900/20 border border-blue-500/30 text-blue-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
+                          trade.status !== 'ACTIVE' ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-900/40'
+                        }`}
+                      >
+                        Triggered
+                      </button>
+                      {trade.status !== 'ACTIVE' && (
+                        <>
+                          <button
+                            onClick={() => handleUpdateTrade(trade, 'TP')}
+                            className="bg-yellow-900/20 hover:bg-yellow-900/40 border border-yellow-500/30 text-yellow-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
+                          >
+                            TP Hit
+                          </button>
+                          <button
+                            onClick={() => handleUpdateTrade(trade, 'SL')}
+                            className="bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
+                          >
+                            SL Hit
+                          </button>
+                          <button
+                            onClick={() => handleUpdateTrade(trade, 'CLOSE')}
+                            className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
+                          >
+                            Close Manual
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
