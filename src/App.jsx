@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
+
+// Statuses that mean a trade's outcome is settled and it's safe to prune
+// once it's no longer "today's" — anything else is still pending action.
+const TERMINAL_STATUSES = ['TP', 'SL', 'CLOSE'];
 
 const CommandCenter = () => {
   const [formData, setFormData] = useState({
@@ -14,7 +18,28 @@ const CommandCenter = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
+  const [toast, setToast] = useState({ show: false, message: '', type: '' });
   const [activeTrades, setActiveTrades] = useState([]);
+  // Mirrors activeTrades synchronously so async handlers never compute
+  // updates off a stale closure (state updates are batched/async).
+  const activeTradesRef = useRef([]);
+  // Trade ids with an update currently in flight — blocks double-clicks
+  // from firing duplicate Discord/Supabase requests for the same trade.
+  const [pendingTradeIds, setPendingTradeIds] = useState(() => new Set());
+
+  const markPending = (id) => setPendingTradeIds(prev => new Set(prev).add(id));
+  const clearPending = (id) => setPendingTradeIds(prev => {
+    const next = new Set(prev);
+    next.delete(id);
+    return next;
+  });
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: '' });
+    }, 3000);
+  };
 
   useEffect(() => {
     const savedTrades = localStorage.getItem('activeTrades');
@@ -26,9 +51,14 @@ const CommandCenter = () => {
 
         const todaysTrades = parsedTrades.filter(trade => {
           const tradeDate = new Date(trade.timestamp);
-          return tradeDate >= startOfDay;
+          const isResolved = trade.isClosed || TERMINAL_STATUSES.includes(trade.status);
+          // Keep anything from today, plus older trades that are still
+          // pending an outcome — otherwise they'd vanish from the UI with
+          // no way to ever mark them TP/SL/Closed again.
+          return tradeDate >= startOfDay || !isResolved;
         });
 
+        activeTradesRef.current = todaysTrades;
         setActiveTrades(todaysTrades);
 
         if (todaysTrades.length !== parsedTrades.length) {
@@ -41,6 +71,7 @@ const CommandCenter = () => {
   }, []);
 
   const saveTrades = (trades) => {
+    activeTradesRef.current = trades;
     setActiveTrades(trades);
     localStorage.setItem('activeTrades', JSON.stringify(trades));
   };
@@ -69,16 +100,14 @@ const CommandCenter = () => {
     setIsLoading(true);
     setAlert({ show: false, message: '', type: '' });
 
-    let webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
-    if (!webhookUrl) {
-      setAlert({ show: true, message: 'Webhook URL is missing in .env!', type: 'error' });
+    if (!isSupabaseConfigured) {
+      setAlert({ show: true, message: 'Supabase is not configured — check your .env file.', type: 'error' });
       setIsLoading(false);
       return;
     }
 
-    // Append wait=true to capture the message id
-    const postUrl = new URL(webhookUrl);
-    postUrl.searchParams.append('wait', 'true');
+    const webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
+    const discordEnabled = Boolean(webhookUrl);
 
     const color = isBuy ? 5763719 : 15548997; // Green for Buy, Red for Sell
 
@@ -122,6 +151,15 @@ const CommandCenter = () => {
       });
     }
 
+    // Market orders fill immediately, so they're already "triggered" on creation
+    if (isMarket) {
+      fields.push({
+        name: 'Update Status',
+        value: '🟢 ENTRY TRIGGERED - Trade is Active',
+        inline: false,
+      });
+    }
+
     const embed = {
       title: `🚨 NEW SETUP: ${formData.pair.toUpperCase()} 🚨`,
       color: color,
@@ -132,22 +170,38 @@ const CommandCenter = () => {
 
     const payload = { embeds: [embed] };
 
-    try {
-      const response = await fetch(postUrl.toString(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+    // Discord is a notification channel, not the source of truth — its
+    // failure must never block recording the trade in Supabase.
+    let messageId = `local-${Date.now()}`;
+    let discordFailed = false;
 
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status} ${response.statusText}`);
+    if (discordEnabled) {
+      try {
+        // Append wait=true to capture the message id
+        const postUrl = new URL(webhookUrl);
+        postUrl.searchParams.append('wait', 'true');
+
+        const response = await fetch(postUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error: ${response.status} ${response.statusText}`);
+        }
+
+        const responseData = await response.json();
+        messageId = responseData.id;
+      } catch (discordError) {
+        console.error('Discord broadcast failed:', discordError);
+        discordFailed = true;
       }
+    }
 
-      const responseData = await response.json();
-      const messageId = responseData.id;
-
+    try {
       // Determine entry price for display
       let entry = 'Market';
       if (formData.orderPrice) entry = formData.orderPrice;
@@ -165,8 +219,9 @@ const CommandCenter = () => {
             take_profit_price: formData.takeProfit ? parseFloat(formData.takeProfit) : null,
             trigger_price: formData.triggerPrice ? parseFloat(formData.triggerPrice) : null,
             notes: formData.notes || null,
-            status: 'ACTIVE',
+            status: isMarket ? 'TRIGGERED' : 'ACTIVE',
             is_active: true,
+            ...(isMarket && { triggered_at: new Date().toISOString() }),
           },
         ])
         .select()
@@ -186,13 +241,21 @@ const CommandCenter = () => {
         orderType: formData.orderType,
         entry: entry,
         timestamp: new Date().toISOString(),
-        status: 'ACTIVE',
+        status: isMarket ? 'TRIGGERED' : 'ACTIVE',
         originalEmbed: embed,
       };
 
-      saveTrades([newTrade, ...activeTrades]);
+      saveTrades([newTrade, ...activeTradesRef.current]);
 
-      setAlert({ show: true, message: 'Setup successfully broadcasted!', type: 'success' });
+      setAlert({
+        show: true,
+        message: discordFailed
+          ? 'Setup saved, but Discord broadcast failed.'
+          : discordEnabled
+          ? 'Setup successfully broadcasted!'
+          : 'Setup saved (Discord disabled).',
+        type: discordFailed ? 'error' : 'success',
+      });
       setFormData({
         pair: '',
         orderType: 'Buy Market',
@@ -208,7 +271,7 @@ const CommandCenter = () => {
       }, 3000);
     } catch (error) {
       console.error(error);
-      setAlert({ show: true, message: 'Failed to broadcast setup.', type: 'error' });
+      setAlert({ show: true, message: 'Failed to save setup.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -216,7 +279,7 @@ const CommandCenter = () => {
 
   const handleUpdateTrade = async (trade, actionType) => {
     const webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
-    if (!webhookUrl) return;
+    const discordEnabled = Boolean(webhookUrl);
 
     let color;
     let statusText;
@@ -242,41 +305,61 @@ const CommandCenter = () => {
         return;
     }
 
-    // Filter out old update status if it exists
-    const filteredFields = trade.originalEmbed.fields.filter(f => f.name !== 'Update Status');
-    
-    const updatedEmbed = {
-      ...trade.originalEmbed,
-      color: color,
-      fields: [
-        ...filteredFields,
-        {
-          name: 'Update Status',
-          value: statusText,
-          inline: false,
-        }
-      ]
-    };
-
-    const payload = { embeds: [updatedEmbed] };
+    if (pendingTradeIds.has(trade.id)) return;
+    markPending(trade.id);
 
     try {
-      const baseUrl = webhookUrl.split('?')[0]; // Remove any search params from base url
-      const patchUrl = `${baseUrl}/messages/${trade.id}`;
+      // Filter out old update status if it exists (originalEmbed may be
+      // missing on corrupted/legacy trade records — don't let that crash the click)
+      const filteredFields = (trade.originalEmbed?.fields ?? []).filter(f => f.name !== 'Update Status');
 
-      const response = await fetch(patchUrl, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const updatedEmbed = {
+        ...trade.originalEmbed,
+        color: color,
+        fields: [
+          ...filteredFields,
+          {
+            name: 'Update Status',
+            value: statusText,
+            inline: false,
+          }
+        ]
+      };
 
-      if (!response.ok) {
-        throw new Error(`Failed to update message: ${response.status}`);
+      const payload = { embeds: [updatedEmbed] };
+
+      // Discord is a notification channel, not the source of truth — its
+      // failure must never block syncing the real status to Supabase.
+      let discordFailed = false;
+
+      if (discordEnabled) {
+        try {
+          const baseUrl = webhookUrl.split('?')[0]; // Remove any search params from base url
+          const patchUrl = `${baseUrl}/messages/${trade.id}`;
+
+          const response = await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to update message: ${response.status}`);
+          }
+        } catch (discordError) {
+          console.error('Discord update failed:', discordError);
+          discordFailed = true;
+        }
       }
 
       // --- Sync status to Supabase ---
+      if (trade.supabaseId && !supabase) {
+        showToast('Supabase is not configured — status change was not saved.', 'error');
+        return;
+      }
+
       if (trade.supabaseId) {
         const statusMap = {
           TRIGGERED: 'TRIGGERED',
@@ -284,12 +367,12 @@ const CommandCenter = () => {
           SL: 'SL_HIT',
           CLOSE: 'MANUALLY_CLOSED',
         };
-        
+
         const updatePayload = {
           status: statusMap[actionType],
           updated_at: new Date().toISOString(),
         };
-        
+
         if (actionType === 'TRIGGERED') {
           updatePayload.triggered_at = new Date().toISOString();
         }
@@ -301,55 +384,90 @@ const CommandCenter = () => {
 
         if (updateError) {
           console.error('Supabase update error:', updateError);
+          showToast('Failed to update the trade in the database.', 'error');
+          return;
         }
       }
 
       // Update trade with new embed so subsequent updates preserve it
       const updatedTrade = { ...trade, originalEmbed: updatedEmbed, status: actionType };
-      const newTrades = activeTrades.map(t => t.id === trade.id ? updatedTrade : t);
+      const newTrades = activeTradesRef.current.map(t => t.id === trade.id ? updatedTrade : t);
       saveTrades(newTrades);
+
+      const cleanStatusText = statusText.replace(/^[^\w]+/, '');
+      showToast(
+        discordFailed ? `${trade.pair}: ${cleanStatusText} (Discord update failed)` : `${trade.pair}: ${cleanStatusText}`,
+        discordFailed ? 'error' : 'success'
+      );
     } catch (error) {
       console.error(error);
-      alert('Failed to update the trade on Discord.');
+      showToast('Failed to update the trade.', 'error');
+    } finally {
+      clearPending(trade.id);
     }
   };
 
   const handleToggleActive = async (trade) => {
-    const newIsClosed = !trade.isClosed;
-    
-    // Update Supabase
-    if (trade.supabaseId) {
-      const updatePayload = {
-        is_active: !newIsClosed,
-        updated_at: new Date().toISOString(),
-      };
-      
-      if (newIsClosed) {
-        updatePayload.settled_at = new Date().toISOString();
-      } else {
-        updatePayload.settled_at = null;
-      }
+    if (pendingTradeIds.has(trade.id)) return;
+    markPending(trade.id);
 
-      const { error: updateError } = await supabase
-        .from('trade_history')
-        .update(updatePayload)
-        .eq('id', trade.supabaseId);
-        
-      if (updateError) {
-        console.error('Supabase update error:', updateError);
-        alert('Failed to update status in database.');
+    try {
+      const newIsClosed = !trade.isClosed;
+
+      // Update Supabase
+      if (trade.supabaseId && !supabase) {
+        showToast('Supabase is not configured — status change was not saved.', 'error');
         return;
       }
+
+      if (trade.supabaseId) {
+        const updatePayload = {
+          is_active: !newIsClosed,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (newIsClosed) {
+          updatePayload.settled_at = new Date().toISOString();
+        } else {
+          updatePayload.settled_at = null;
+        }
+
+        const { error: updateError } = await supabase
+          .from('trade_history')
+          .update(updatePayload)
+          .eq('id', trade.supabaseId);
+
+        if (updateError) {
+          console.error('Supabase update error:', updateError);
+          showToast('Failed to update status in database.', 'error');
+          return;
+        }
+      }
+
+      // Update local state
+      const updatedTrade = { ...trade, isClosed: newIsClosed };
+      const newTrades = activeTradesRef.current.map(t => t.id === trade.id ? updatedTrade : t);
+      saveTrades(newTrades);
+
+      showToast(`${trade.pair} marked ${newIsClosed ? 'Inactive' : 'Active'}.`, 'success');
+    } finally {
+      clearPending(trade.id);
     }
-    
-    // Update local state
-    const updatedTrade = { ...trade, isClosed: newIsClosed };
-    const newTrades = activeTrades.map(t => t.id === trade.id ? updatedTrade : t);
-    saveTrades(newTrades);
   };
 
   return (
     <div className="min-h-screen bg-[#0d0f12] text-gray-200 p-4 font-sans flex justify-center items-start pt-10">
+      {toast.show && (
+        <div
+          className={`fixed top-6 right-6 z-50 max-w-sm p-4 rounded-md text-sm border shadow-2xl ${
+            toast.type === 'success'
+              ? 'bg-green-900/90 border-green-500/50 text-green-200'
+              : 'bg-red-900/90 border-red-500/50 text-red-200'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Main Form Panel */}
@@ -361,6 +479,12 @@ const CommandCenter = () => {
             </div>
             <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
           </div>
+
+          {!isSupabaseConfigured && (
+            <div className="mb-6 p-4 rounded-md text-sm border bg-red-900/20 border-red-500/50 text-red-400">
+              Supabase is not configured — set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY in .env.
+            </div>
+          )}
 
           {alert.show && (
             <div
@@ -539,9 +663,11 @@ const CommandCenter = () => {
             </div>
           ) : (
             <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
-              {activeTrades.map((trade) => (
+              {activeTrades.map((trade) => {
+                const isPending = pendingTradeIds.has(trade.id);
+                return (
                 <div key={trade.id} className="bg-[#0d0f12] border border-[#1c1e24] rounded-md p-4 flex flex-col gap-4">
-                  
+
                   {/* Trade Info Header */}
                   <div className="flex justify-between items-start">
                     <div>
@@ -557,9 +683,12 @@ const CommandCenter = () => {
                     </div>
                     <button
                       onClick={() => handleToggleActive(trade)}
+                      disabled={isPending}
                       className={`text-[10px] px-2 py-1 rounded font-bold tracking-wider transition-colors uppercase ${
-                        trade.isClosed 
-                          ? 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-600' 
+                        isPending ? 'opacity-40 cursor-not-allowed' : ''
+                      } ${
+                        trade.isClosed
+                          ? 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-600'
                           : 'bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-500/30'
                       }`}
                     >
@@ -576,9 +705,9 @@ const CommandCenter = () => {
                     <div className={`grid gap-2 ${trade.status !== 'ACTIVE' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1'}`}>
                       <button
                         onClick={() => handleUpdateTrade(trade, 'TRIGGERED')}
-                        disabled={trade.status !== 'ACTIVE'}
+                        disabled={trade.status !== 'ACTIVE' || isPending}
                         className={`bg-blue-900/20 border border-blue-500/30 text-blue-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
-                          trade.status !== 'ACTIVE' ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-900/40'
+                          trade.status !== 'ACTIVE' || isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-900/40'
                         }`}
                       >
                         Triggered
@@ -587,19 +716,28 @@ const CommandCenter = () => {
                         <>
                           <button
                             onClick={() => handleUpdateTrade(trade, 'TP')}
-                            className="bg-yellow-900/20 hover:bg-yellow-900/40 border border-yellow-500/30 text-yellow-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
+                            disabled={isPending}
+                            className={`bg-yellow-900/20 border border-yellow-500/30 text-yellow-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
+                              isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-yellow-900/40'
+                            }`}
                           >
                             TP Hit
                           </button>
                           <button
                             onClick={() => handleUpdateTrade(trade, 'SL')}
-                            className="bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
+                            disabled={isPending}
+                            className={`bg-red-900/20 border border-red-500/30 text-red-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
+                              isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-red-900/40'
+                            }`}
                           >
                             SL Hit
                           </button>
                           <button
                             onClick={() => handleUpdateTrade(trade, 'CLOSE')}
-                            className="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide"
+                            disabled={isPending}
+                            className={`bg-gray-800 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
+                              isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-700'
+                            }`}
                           >
                             Close Manual
                           </button>
@@ -608,7 +746,8 @@ const CommandCenter = () => {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
