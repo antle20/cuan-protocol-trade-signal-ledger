@@ -42,32 +42,76 @@ const CommandCenter = () => {
   };
 
   useEffect(() => {
-    const savedTrades = localStorage.getItem('activeTrades');
-    if (savedTrades) {
-      try {
-        const parsedTrades = JSON.parse(savedTrades);
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
+    const loadTrades = async () => {
+      const savedTrades = localStorage.getItem('activeTrades');
+      if (savedTrades) {
+        try {
+          const parsedTrades = JSON.parse(savedTrades);
+          const startOfDay = new Date();
+          startOfDay.setHours(0, 0, 0, 0);
 
-        const todaysTrades = parsedTrades.filter(trade => {
-          const tradeDate = new Date(trade.timestamp);
-          const isResolved = trade.isClosed || TERMINAL_STATUSES.includes(trade.status);
-          // Keep anything from today, plus older trades that are still
-          // pending an outcome — otherwise they'd vanish from the UI with
-          // no way to ever mark them TP/SL/Closed again.
-          return tradeDate >= startOfDay || !isResolved;
-        });
+          let todaysTrades = parsedTrades.filter(trade => {
+            const tradeDate = new Date(trade.timestamp);
+            const isResolved = trade.isClosed || TERMINAL_STATUSES.includes(trade.status);
+            // Keep anything from today, plus older trades that are still
+            // pending an outcome — otherwise they'd vanish from the UI with
+            // no way to ever mark them TP/SL/Closed again.
+            return tradeDate >= startOfDay || !isResolved;
+          });
 
-        activeTradesRef.current = todaysTrades;
-        setActiveTrades(todaysTrades);
+          if (isSupabaseConfigured && todaysTrades.length > 0) {
+            const supabaseIds = todaysTrades.map(t => t.supabaseId).filter(Boolean);
+            if (supabaseIds.length > 0) {
+              const { data, error } = await supabase
+                .from('trade_histories')
+                .select('id, created_at, triggered_at, settled_at, status, take_profit_price, stop_loss_price, is_active')
+                .in('id', supabaseIds);
 
-        if (todaysTrades.length !== parsedTrades.length) {
-          localStorage.setItem('activeTrades', JSON.stringify(todaysTrades));
+              if (!error && data) {
+                const dbMap = new Map(data.map(item => [item.id, item]));
+
+                todaysTrades = todaysTrades.map(trade => {
+                  const dbTrade = dbMap.get(trade.supabaseId);
+                  if (dbTrade) {
+                    const statusMap = {
+                      'TRIGGERED': 'TRIGGERED',
+                      'TP_HIT': 'TP',
+                      'SL_HIT': 'SL',
+                      'MANUALLY_CLOSED': 'CLOSE',
+                      'ACTIVE': 'ACTIVE'
+                    };
+                    return {
+                      ...trade,
+                      takeProfit: dbTrade.take_profit_price || trade.takeProfit,
+                      stopLoss: dbTrade.stop_loss_price || trade.stopLoss,
+                      timestamp: dbTrade.created_at || trade.timestamp,
+                      triggered_at: dbTrade.triggered_at || trade.triggered_at,
+                      settled_at: dbTrade.settled_at || trade.settled_at,
+                      status: statusMap[dbTrade.status] || trade.status,
+                      isClosed: dbTrade.is_active === false,
+                    };
+                  }
+                  return trade;
+                });
+              } else if (error) {
+                console.error("Error fetching from Supabase:", error);
+              }
+            }
+          }
+
+          activeTradesRef.current = todaysTrades;
+          setActiveTrades(todaysTrades);
+
+          if (todaysTrades.length !== parsedTrades.length) {
+            localStorage.setItem('activeTrades', JSON.stringify(todaysTrades));
+          }
+        } catch (e) {
+          console.error("Could not parse saved trades", e);
         }
-      } catch (e) {
-        console.error("Could not parse saved trades", e);
       }
-    }
+    };
+
+    loadTrades();
   }, []);
 
   const saveTrades = (trades) => {
@@ -209,7 +253,7 @@ const CommandCenter = () => {
 
       // --- Record trade signal in Supabase ---
       const { data: dbRecord, error: dbError } = await supabase
-        .from('trade_history')
+        .from('trade_histories')
         .insert([
           {
             pair_name: formData.pair.toUpperCase(),
@@ -240,7 +284,11 @@ const CommandCenter = () => {
         pair: formData.pair.toUpperCase(),
         orderType: formData.orderType,
         entry: entry,
+        takeProfit: formData.takeProfit || null,
+        stopLoss: formData.stopLoss || null,
         timestamp: new Date().toISOString(),
+        triggered_at: isMarket ? new Date().toISOString() : null,
+        settled_at: null,
         status: isMarket ? 'TRIGGERED' : 'ACTIVE',
         originalEmbed: embed,
       };
@@ -252,8 +300,8 @@ const CommandCenter = () => {
         message: discordFailed
           ? 'Setup saved, but Discord broadcast failed.'
           : discordEnabled
-          ? 'Setup successfully broadcasted!'
-          : 'Setup saved (Discord disabled).',
+            ? 'Setup successfully broadcasted!'
+            : 'Setup saved (Discord disabled).',
         type: discordFailed ? 'error' : 'success',
       });
       setFormData({
@@ -265,7 +313,7 @@ const CommandCenter = () => {
         stopLoss: '',
         notes: '',
       });
-      
+
       setTimeout(() => {
         setAlert({ show: false, message: '', type: '' });
       }, 3000);
@@ -378,7 +426,7 @@ const CommandCenter = () => {
         }
 
         const { error: updateError } = await supabase
-          .from('trade_history')
+          .from('trade_histories')
           .update(updatePayload)
           .eq('id', trade.supabaseId);
 
@@ -391,6 +439,9 @@ const CommandCenter = () => {
 
       // Update trade with new embed so subsequent updates preserve it
       const updatedTrade = { ...trade, originalEmbed: updatedEmbed, status: actionType };
+      if (actionType === 'TRIGGERED') {
+        updatedTrade.triggered_at = new Date().toISOString();
+      }
       const newTrades = activeTradesRef.current.map(t => t.id === trade.id ? updatedTrade : t);
       saveTrades(newTrades);
 
@@ -433,7 +484,7 @@ const CommandCenter = () => {
         }
 
         const { error: updateError } = await supabase
-          .from('trade_history')
+          .from('trade_histories')
           .update(updatePayload)
           .eq('id', trade.supabaseId);
 
@@ -446,10 +497,15 @@ const CommandCenter = () => {
 
       // Update local state
       const updatedTrade = { ...trade, isClosed: newIsClosed };
+      if (newIsClosed) {
+        updatedTrade.settled_at = new Date().toISOString();
+      } else {
+        updatedTrade.settled_at = null;
+      }
       const newTrades = activeTradesRef.current.map(t => t.id === trade.id ? updatedTrade : t);
       saveTrades(newTrades);
 
-      showToast(`${trade.pair} marked ${newIsClosed ? 'Inactive' : 'Active'}.`, 'success');
+      showToast(`${trade.pair} marked ${newIsClosed ? 'Settled' : 'Active'}.`, 'success');
     } finally {
       clearPending(trade.id);
     }
@@ -459,17 +515,16 @@ const CommandCenter = () => {
     <div className="min-h-screen bg-[#0d0f12] text-gray-200 p-4 font-sans flex justify-center items-start pt-10">
       {toast.show && (
         <div
-          className={`fixed top-6 right-6 z-50 max-w-sm p-4 rounded-md text-sm border shadow-2xl ${
-            toast.type === 'success'
-              ? 'bg-green-900/90 border-green-500/50 text-green-200'
-              : 'bg-red-900/90 border-red-500/50 text-red-200'
-          }`}
+          className={`fixed top-6 right-6 z-50 max-w-sm p-4 rounded-md text-sm border shadow-2xl ${toast.type === 'success'
+            ? 'bg-green-900/90 border-green-500/50 text-green-200'
+            : 'bg-red-900/90 border-red-500/50 text-red-200'
+            }`}
         >
           {toast.message}
         </div>
       )}
       <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
+
         {/* Main Form Panel */}
         <div className="lg:col-span-5 bg-[#14161a] border border-[#23262e] rounded-lg shadow-2xl p-6 sm:p-8 self-start">
           <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#23262e]">
@@ -488,11 +543,10 @@ const CommandCenter = () => {
 
           {alert.show && (
             <div
-              className={`mb-6 p-4 rounded-md text-sm border ${
-                alert.type === 'success'
-                  ? 'bg-green-900/20 border-green-500/50 text-green-400'
-                  : 'bg-red-900/20 border-red-500/50 text-red-400'
-              }`}
+              className={`mb-6 p-4 rounded-md text-sm border ${alert.type === 'success'
+                ? 'bg-green-900/20 border-green-500/50 text-green-400'
+                : 'bg-red-900/20 border-red-500/50 text-red-400'
+                }`}
             >
               {alert.message}
             </div>
@@ -634,11 +688,10 @@ const CommandCenter = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-4 rounded font-bold uppercase tracking-wider text-sm transition-all duration-200 mt-6 shadow-lg ${
-                isBuy
-                  ? 'bg-[#10b981] hover:bg-[#059669] text-white shadow-green-900/20'
-                  : 'bg-[#ef4444] hover:bg-[#dc2626] text-white shadow-red-900/20'
-              } ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+              className={`w-full py-4 rounded font-bold uppercase tracking-wider text-sm transition-all duration-200 mt-6 shadow-lg ${isBuy
+                ? 'bg-[#10b981] hover:bg-[#059669] text-white shadow-green-900/20'
+                : 'bg-[#ef4444] hover:bg-[#dc2626] text-white shadow-red-900/20'
+                } ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
               {isLoading ? 'Broadcasting...' : 'Blast to Discord'}
             </button>
@@ -666,86 +719,98 @@ const CommandCenter = () => {
               {activeTrades.map((trade) => {
                 const isPending = pendingTradeIds.has(trade.id);
                 return (
-                <div key={trade.id} className="bg-[#0d0f12] border border-[#1c1e24] rounded-md p-4 flex flex-col gap-4">
+                  <div key={trade.id} className="bg-[#0d0f12] border border-[#1c1e24] rounded-md p-4 flex flex-col gap-4">
 
-                  {/* Trade Info Header */}
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${trade.orderType.startsWith('Buy') ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                          {trade.orderType}
-                        </span>
-                        <span className="font-mono font-bold text-white tracking-wider">{trade.pair}</span>
+                    {/* Trade Info Header */}
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${trade.orderType.startsWith('Buy') ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                            {trade.orderType}
+                          </span>
+                          <span className="font-mono font-bold text-white tracking-wider">{trade.pair}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide border ${
+                            trade.status === 'TP' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-500/30' :
+                            trade.status === 'SL' ? 'bg-red-900/20 text-red-400 border-red-500/30' :
+                            trade.status === 'TRIGGERED' ? 'bg-blue-900/20 text-blue-400 border-blue-500/30' :
+                            trade.status === 'CLOSE' ? 'bg-gray-800 text-gray-400 border-gray-600' :
+                            'bg-[#1c1e24] text-gray-500 border-[#2a2d36]' // ACTIVE
+                          }`}>
+                            {trade.status === 'CLOSE' ? 'MANUAL CLOSE' : trade.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 font-mono flex flex-col gap-1 mt-2">
+                          <div>
+                            <span className="text-gray-400">Entry:</span> {trade.entry}
+                            {trade.takeProfit && <span> &bull; <span className="text-green-500/70">TP:</span> {trade.takeProfit}</span>}
+                            {trade.stopLoss && <span> &bull; <span className="text-red-500/70">SL:</span> {trade.stopLoss}</span>}
+                          </div>
+                          <div className="text-[10px] grid grid-cols-1 gap-0.5 mt-0.5">
+                            <div><span className="text-gray-600">Created:</span> {new Date(trade.timestamp).toLocaleString('en-GB')}</div>
+                            {trade.triggered_at && <div><span className="text-gray-600">Triggered:</span> {new Date(trade.triggered_at).toLocaleString('en-GB')}</div>}
+                            {trade.settled_at && <div><span className="text-gray-600">Settled:</span> {new Date(trade.settled_at).toLocaleString('en-GB')}</div>}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500 font-mono">
-                        Entry: {trade.entry} &bull; {new Date(trade.timestamp).toLocaleTimeString()}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleToggleActive(trade)}
-                      disabled={isPending}
-                      className={`text-[10px] px-2 py-1 rounded font-bold tracking-wider transition-colors uppercase ${
-                        isPending ? 'opacity-40 cursor-not-allowed' : ''
-                      } ${
-                        trade.isClosed
-                          ? 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-600'
-                          : 'bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-500/30'
-                      }`}
-                    >
-                      {trade.isClosed ? 'Inactive' : 'Active'}
-                    </button>
-                  </div>
-
-                  {/* Action Buttons */}
-                  {trade.isClosed ? (
-                    <div className="bg-[#1c1e24] border border-[#23262e] rounded p-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Trade Inactive
-                    </div>
-                  ) : (
-                    <div className={`grid gap-2 ${trade.status !== 'ACTIVE' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1'}`}>
                       <button
-                        onClick={() => handleUpdateTrade(trade, 'TRIGGERED')}
-                        disabled={trade.status !== 'ACTIVE' || isPending}
-                        className={`bg-blue-900/20 border border-blue-500/30 text-blue-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
-                          trade.status !== 'ACTIVE' || isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-900/40'
-                        }`}
+                        onClick={() => handleToggleActive(trade)}
+                        disabled={isPending}
+                        className={`text-[10px] px-2 py-1 rounded font-bold tracking-wider transition-colors uppercase ${isPending ? 'opacity-40 cursor-not-allowed' : ''
+                          } ${trade.isClosed
+                            ? 'bg-gray-800 text-gray-400 hover:bg-gray-700 border border-gray-600'
+                            : 'bg-green-900/30 text-green-400 hover:bg-green-900/50 border border-green-500/30'
+                          }`}
                       >
-                        Triggered
+                        {trade.isClosed ? 'Settled' : 'Active'}
                       </button>
-                      {trade.status !== 'ACTIVE' && (
-                        <>
-                          <button
-                            onClick={() => handleUpdateTrade(trade, 'TP')}
-                            disabled={isPending}
-                            className={`bg-yellow-900/20 border border-yellow-500/30 text-yellow-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
-                              isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-yellow-900/40'
-                            }`}
-                          >
-                            TP Hit
-                          </button>
-                          <button
-                            onClick={() => handleUpdateTrade(trade, 'SL')}
-                            disabled={isPending}
-                            className={`bg-red-900/20 border border-red-500/30 text-red-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
-                              isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-red-900/40'
-                            }`}
-                          >
-                            SL Hit
-                          </button>
-                          <button
-                            onClick={() => handleUpdateTrade(trade, 'CLOSE')}
-                            disabled={isPending}
-                            className={`bg-gray-800 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${
-                              isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-700'
-                            }`}
-                          >
-                            Close Manual
-                          </button>
-                        </>
-                      )}
                     </div>
-                  )}
-                </div>
+
+                    {/* Action Buttons */}
+                    {trade.isClosed ? (
+                      <div className="bg-[#1c1e24] border border-[#23262e] rounded p-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Trade Settled
+                      </div>
+                    ) : (
+                      <div className={`grid gap-2 ${trade.status !== 'ACTIVE' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1'}`}>
+                        <button
+                          onClick={() => handleUpdateTrade(trade, 'TRIGGERED')}
+                          disabled={trade.status !== 'ACTIVE' || isPending}
+                          className={`bg-blue-900/20 border border-blue-500/30 text-blue-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${trade.status !== 'ACTIVE' || isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-900/40'
+                            }`}
+                        >
+                          Triggered
+                        </button>
+                        {trade.status !== 'ACTIVE' && (
+                          <>
+                            <button
+                              onClick={() => handleUpdateTrade(trade, 'TP')}
+                              disabled={isPending}
+                              className={`bg-yellow-900/20 border border-yellow-500/30 text-yellow-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-yellow-900/40'
+                                }`}
+                            >
+                              TP Hit
+                            </button>
+                            <button
+                              onClick={() => handleUpdateTrade(trade, 'SL')}
+                              disabled={isPending}
+                              className={`bg-red-900/20 border border-red-500/30 text-red-400 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-red-900/40'
+                                }`}
+                            >
+                              SL Hit
+                            </button>
+                            <button
+                              onClick={() => handleUpdateTrade(trade, 'CLOSE')}
+                              disabled={isPending}
+                              className={`bg-gray-800 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-700'
+                                }`}
+                            >
+                              Close Manual
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
