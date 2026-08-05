@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-// Statuses that mean a trade's outcome is settled and it's safe to prune
-// once it's no longer "today's" — anything else is still pending action.
-const TERMINAL_STATUSES = ['TP', 'SL', 'CLOSE'];
-
 const CommandCenter = ({ session }) => {
   const [formData, setFormData] = useState({
     pair: '',
@@ -46,73 +42,80 @@ const CommandCenter = ({ session }) => {
   };
 
   useEffect(() => {
-    const loadTrades = async () => {
+    const loadFromLocalCache = () => {
       const savedTrades = localStorage.getItem('activeTrades');
-      if (savedTrades) {
-        try {
-          const parsedTrades = JSON.parse(savedTrades);
-          const startOfDay = new Date();
-          startOfDay.setHours(0, 0, 0, 0);
-
-          let todaysTrades = parsedTrades.filter(trade => {
-            const tradeDate = new Date(trade.timestamp);
-            const isResolved = trade.isClosed || TERMINAL_STATUSES.includes(trade.status);
-            // Keep anything from today, plus older trades that are still
-            // pending an outcome — otherwise they'd vanish from the UI with
-            // no way to ever mark them TP/SL/Closed again.
-            return tradeDate >= startOfDay || !isResolved;
-          });
-
-          if (isSupabaseConfigured && todaysTrades.length > 0) {
-            const supabaseIds = todaysTrades.map(t => t.supabaseId).filter(Boolean);
-            if (supabaseIds.length > 0) {
-              const { data, error } = await supabase
-                .from('trade_histories')
-                .select('id, created_at, triggered_at, settled_at, status, take_profit_price, stop_loss_price, is_active')
-                .in('id', supabaseIds);
-
-              if (!error && data) {
-                const dbMap = new Map(data.map(item => [item.id, item]));
-
-                todaysTrades = todaysTrades.map(trade => {
-                  const dbTrade = dbMap.get(trade.supabaseId);
-                  if (dbTrade) {
-                    const statusMap = {
-                      'TRIGGERED': 'TRIGGERED',
-                      'TP_HIT': 'TP',
-                      'SL_HIT': 'SL',
-                      'MANUALLY_CLOSED': 'CLOSE',
-                      'ACTIVE': 'ACTIVE'
-                    };
-                    return {
-                      ...trade,
-                      takeProfit: dbTrade.take_profit_price || trade.takeProfit,
-                      stopLoss: dbTrade.stop_loss_price || trade.stopLoss,
-                      timestamp: dbTrade.created_at || trade.timestamp,
-                      triggered_at: dbTrade.triggered_at || trade.triggered_at,
-                      settled_at: dbTrade.settled_at || trade.settled_at,
-                      status: statusMap[dbTrade.status] || trade.status,
-                      isClosed: dbTrade.is_active === false,
-                    };
-                  }
-                  return trade;
-                });
-              } else if (error) {
-                console.error("Error fetching from Supabase:", error);
-              }
-            }
-          }
-
-          activeTradesRef.current = todaysTrades;
-          setActiveTrades(todaysTrades);
-
-          if (todaysTrades.length !== parsedTrades.length) {
-            localStorage.setItem('activeTrades', JSON.stringify(todaysTrades));
-          }
-        } catch (e) {
-          console.error("Could not parse saved trades", e);
-        }
+      if (!savedTrades) return;
+      try {
+        const parsedTrades = JSON.parse(savedTrades);
+        activeTradesRef.current = parsedTrades;
+        setActiveTrades(parsedTrades);
+      } catch (e) {
+        console.error('Could not parse cached trades', e);
       }
+    };
+
+    const loadTrades = async () => {
+      if (!isSupabaseConfigured) {
+        loadFromLocalCache();
+        return;
+      }
+
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
+      // Supabase is the source of truth for *which* trades exist — a trade
+      // created on another browser/device has no footprint in this one's
+      // localStorage, so we can't rely on that as the starting point.
+      const { data, error } = await supabase
+        .from('trade_histories')
+        .select('id, created_at, triggered_at, settled_at, status, pair_name, order_type, order_price, trigger_price, take_profit_price, stop_loss_price, discord_message_id, is_active')
+        .or(`is_active.eq.true,created_at.gte.${startOfDay.toISOString()}`)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching trades from Supabase:', error);
+        loadFromLocalCache();
+        return;
+      }
+
+      const statusMap = {
+        TRIGGERED: 'TRIGGERED',
+        TP_HIT: 'TP',
+        SL_HIT: 'SL',
+        MANUALLY_CLOSED: 'CLOSE',
+        ACTIVE: 'ACTIVE',
+      };
+
+      // originalEmbed (used to rebuild the Discord embed on status updates)
+      // isn't persisted in Supabase, only in this browser's cache — reuse it
+      // when we have it so same-browser reloads don't lose the embed's
+      // original fields. Trades loaded fresh on another device just won't
+      // have one, which handleUpdateTrade already tolerates.
+      const localCache = JSON.parse(localStorage.getItem('activeTrades') || '[]');
+      const cacheBySupabaseId = new Map(localCache.map(t => [t.supabaseId, t]));
+
+      const trades = data.map(row => {
+        const cached = cacheBySupabaseId.get(row.id);
+        return {
+          id: row.discord_message_id || cached?.id || `local-${row.id}`,
+          supabaseId: row.id,
+          pair: row.pair_name,
+          orderType: row.order_type,
+          entry: row.order_price ?? row.trigger_price ?? 'Market',
+          takeProfit: row.take_profit_price,
+          stopLoss: row.stop_loss_price,
+          timestamp: row.created_at,
+          triggered_at: row.triggered_at,
+          settled_at: row.settled_at,
+          status: statusMap[row.status] || row.status,
+          isClosed: row.is_active === false,
+          originalEmbed: cached?.originalEmbed,
+        };
+      });
+
+      activeTradesRef.current = trades;
+      setActiveTrades(trades);
+      localStorage.setItem('activeTrades', JSON.stringify(trades));
     };
 
     loadTrades();
@@ -249,6 +252,7 @@ const CommandCenter = ({ session }) => {
             notes: formData.notes || null,
             status: isMarket ? 'TRIGGERED' : 'ACTIVE',
             is_active: true,
+            discord_message_id: discordFailed ? null : messageId,
             ...(isMarket && { triggered_at: new Date().toISOString() }),
           },
         ])
@@ -357,14 +361,22 @@ const CommandCenter = ({ session }) => {
       // failure must never block syncing the real status to Supabase.
       let discordFailed = false;
 
-      try {
-        const { error: fnError } = await supabase.functions.invoke('broadcast-discord', {
-          body: { embed: updatedEmbed, messageId: trade.id },
-        });
-        if (fnError) throw fnError;
-      } catch (discordError) {
-        console.error('Discord update failed:', discordError);
-        discordFailed = true;
+      // Trades with no known Discord message (Discord failed/was skipped at
+      // creation, or the trade was loaded on a device that never created it)
+      // have no id to PATCH — calling broadcast-discord without a messageId
+      // would post a brand-new message instead of editing the original one.
+      const hasDiscordMessage = trade.id && !String(trade.id).startsWith('local-');
+
+      if (hasDiscordMessage) {
+        try {
+          const { error: fnError } = await supabase.functions.invoke('broadcast-discord', {
+            body: { embed: updatedEmbed, messageId: trade.id },
+          });
+          if (fnError) throw fnError;
+        } catch (discordError) {
+          console.error('Discord update failed:', discordError);
+          discordFailed = true;
+        }
       }
 
       // --- Sync status to Supabase ---
