@@ -154,9 +154,6 @@ const CommandCenter = ({ session }) => {
       return;
     }
 
-    const webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
-    const discordEnabled = Boolean(webhookUrl);
-
     const color = isBuy ? 5763719 : 15548997; // Green for Buy, Red for Sell
 
     const fields = [
@@ -216,37 +213,20 @@ const CommandCenter = ({ session }) => {
       ...(formData.notes && { description: `**Notes / Analysis**\n${formData.notes}` }),
     };
 
-    const payload = { embeds: [embed] };
-
     // Discord is a notification channel, not the source of truth — its
     // failure must never block recording the trade in Supabase.
     let messageId = `local-${Date.now()}`;
     let discordFailed = false;
 
-    if (discordEnabled) {
-      try {
-        // Append wait=true to capture the message id
-        const postUrl = new URL(webhookUrl);
-        postUrl.searchParams.append('wait', 'true');
-
-        const response = await fetch(postUrl.toString(), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error: ${response.status} ${response.statusText}`);
-        }
-
-        const responseData = await response.json();
-        messageId = responseData.id;
-      } catch (discordError) {
-        console.error('Discord broadcast failed:', discordError);
-        discordFailed = true;
-      }
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke('broadcast-discord', {
+        body: { embed },
+      });
+      if (fnError) throw fnError;
+      if (fnData?.id) messageId = fnData.id;
+    } catch (discordError) {
+      console.error('Discord broadcast failed:', discordError);
+      discordFailed = true;
     }
 
     try {
@@ -303,9 +283,7 @@ const CommandCenter = ({ session }) => {
         show: true,
         message: discordFailed
           ? 'Setup saved, but Discord broadcast failed.'
-          : discordEnabled
-            ? 'Setup successfully broadcasted!'
-            : 'Setup saved (Discord disabled).',
+          : 'Setup successfully broadcasted!',
         type: discordFailed ? 'error' : 'success',
       });
       setFormData({
@@ -330,9 +308,6 @@ const CommandCenter = ({ session }) => {
   };
 
   const handleUpdateTrade = async (trade, actionType) => {
-    const webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
-    const discordEnabled = Boolean(webhookUrl);
-
     let color;
     let statusText;
 
@@ -378,32 +353,18 @@ const CommandCenter = ({ session }) => {
         ]
       };
 
-      const payload = { embeds: [updatedEmbed] };
-
       // Discord is a notification channel, not the source of truth — its
       // failure must never block syncing the real status to Supabase.
       let discordFailed = false;
 
-      if (discordEnabled) {
-        try {
-          const baseUrl = webhookUrl.split('?')[0]; // Remove any search params from base url
-          const patchUrl = `${baseUrl}/messages/${trade.id}`;
-
-          const response = await fetch(patchUrl, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Failed to update message: ${response.status}`);
-          }
-        } catch (discordError) {
-          console.error('Discord update failed:', discordError);
-          discordFailed = true;
-        }
+      try {
+        const { error: fnError } = await supabase.functions.invoke('broadcast-discord', {
+          body: { embed: updatedEmbed, messageId: trade.id },
+        });
+        if (fnError) throw fnError;
+      } catch (discordError) {
+        console.error('Discord update failed:', discordError);
+        discordFailed = true;
       }
 
       // --- Sync status to Supabase ---
