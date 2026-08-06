@@ -132,6 +132,8 @@ const CommandCenter = ({ session }) => {
     'Sell Market',
     'Buy Limit',
     'Sell Limit',
+    'Buy Stop',
+    'Sell Stop',
     'Buy Stop Limit',
     'Sell Stop Limit',
   ];
@@ -145,6 +147,7 @@ const CommandCenter = ({ session }) => {
   const isMarket = formData.orderType.includes('Market');
   const isLimit = formData.orderType.includes('Limit') && !formData.orderType.includes('Stop Limit');
   const isStopLimit = formData.orderType.includes('Stop Limit');
+  const isStop = formData.orderType.includes('Stop') && !isStopLimit;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -167,7 +170,7 @@ const CommandCenter = ({ session }) => {
       },
     ];
 
-    if (isStopLimit && formData.triggerPrice) {
+    if ((isStopLimit || isStop) && formData.triggerPrice) {
       fields.push({
         name: 'Trigger Price',
         value: formData.triggerPrice,
@@ -587,7 +590,7 @@ const CommandCenter = ({ session }) => {
             {!isMarket && (
               <div className="bg-[#101216] border border-[#1c1e24] rounded-md p-4 space-y-4">
                 <div className={`grid ${isStopLimit ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-                  {isStopLimit && (
+                  {(isStopLimit || isStop) && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
                         Trigger Price
@@ -599,7 +602,7 @@ const CommandCenter = ({ session }) => {
                         value={formData.triggerPrice}
                         onChange={handleChange}
                         placeholder="0.00"
-                        required={isStopLimit}
+                        required={isStopLimit || isStop}
                         className="w-full bg-[#0d0f12] border border-[#23262e] rounded p-3 text-sm text-white focus:outline-none focus:border-[#f3a910] transition-colors font-mono placeholder-gray-700"
                       />
                     </div>
