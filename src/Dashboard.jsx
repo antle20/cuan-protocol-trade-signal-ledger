@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
+const ASSET_CLASSES = ['Crypto', 'Forex', 'Commodities', 'Indices'];
+
 const CommandCenter = ({ session }) => {
   const [formData, setFormData] = useState({
     pair: '',
+    assetClass: ASSET_CLASSES[0],
     orderType: 'Buy Market',
     triggerPrice: '',
     orderPrice: '',
@@ -11,6 +14,7 @@ const CommandCenter = ({ session }) => {
     stopLoss: '',
     notes: '',
   });
+  const [assetClassFilter, setAssetClassFilter] = useState('ALL');
 
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
@@ -41,83 +45,84 @@ const CommandCenter = ({ session }) => {
     }, 3000);
   };
 
-  useEffect(() => {
-    const loadFromLocalCache = () => {
-      const savedTrades = localStorage.getItem('activeTrades');
-      if (!savedTrades) return;
-      try {
-        const parsedTrades = JSON.parse(savedTrades);
-        activeTradesRef.current = parsedTrades;
-        setActiveTrades(parsedTrades);
-      } catch (e) {
-        console.error('Could not parse cached trades', e);
-      }
+  const loadFromLocalCache = () => {
+    const savedTrades = localStorage.getItem('activeTrades');
+    if (!savedTrades) return;
+    try {
+      const parsedTrades = JSON.parse(savedTrades);
+      activeTradesRef.current = parsedTrades;
+      setActiveTrades(parsedTrades);
+    } catch (e) {
+      console.error('Could not parse cached trades', e);
+    }
+  };
+
+  const loadTrades = async () => {
+    if (!isSupabaseConfigured) {
+      loadFromLocalCache();
+      return;
+    }
+
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // Supabase is the source of truth for *which* trades exist — a trade
+    // created on another browser/device has no footprint in this one's
+    // localStorage, so we can't rely on that as the starting point.
+    const { data, error } = await supabase
+      .from('trade_histories')
+      .select('id, created_at, triggered_at, settled_at, status, pair_name, asset_class, order_type, order_price, trigger_price, take_profit_price, stop_loss_price, discord_message_id, is_active')
+      .or(`is_active.eq.true,created_at.gte.${startOfDay.toISOString()}`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching trades from Supabase:', error);
+      loadFromLocalCache();
+      return;
+    }
+
+    const statusMap = {
+      TRIGGERED: 'TRIGGERED',
+      TP_HIT: 'TP',
+      SL_HIT: 'SL',
+      MANUALLY_CLOSED: 'CLOSE',
+      ACTIVE: 'ACTIVE',
     };
 
-    const loadTrades = async () => {
-      if (!isSupabaseConfigured) {
-        loadFromLocalCache();
-        return;
-      }
+    // originalEmbed (used to rebuild the Discord embed on status updates)
+    // isn't persisted in Supabase, only in this browser's cache — reuse it
+    // when we have it so same-browser reloads don't lose the embed's
+    // original fields. Trades loaded fresh on another device just won't
+    // have one, which handleUpdateTrade already tolerates.
+    const localCache = JSON.parse(localStorage.getItem('activeTrades') || '[]');
+    const cacheBySupabaseId = new Map(localCache.map(t => [t.supabaseId, t]));
 
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-
-      // Supabase is the source of truth for *which* trades exist — a trade
-      // created on another browser/device has no footprint in this one's
-      // localStorage, so we can't rely on that as the starting point.
-      const { data, error } = await supabase
-        .from('trade_histories')
-        .select('id, created_at, triggered_at, settled_at, status, pair_name, order_type, order_price, trigger_price, take_profit_price, stop_loss_price, discord_message_id, is_active')
-        .or(`is_active.eq.true,created_at.gte.${startOfDay.toISOString()}`)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching trades from Supabase:', error);
-        loadFromLocalCache();
-        return;
-      }
-
-      const statusMap = {
-        TRIGGERED: 'TRIGGERED',
-        TP_HIT: 'TP',
-        SL_HIT: 'SL',
-        MANUALLY_CLOSED: 'CLOSE',
-        ACTIVE: 'ACTIVE',
+    const trades = data.map(row => {
+      const cached = cacheBySupabaseId.get(row.id);
+      return {
+        id: row.discord_message_id || cached?.id || `local-${row.id}`,
+        supabaseId: row.id,
+        pair: row.pair_name,
+        assetClass: row.asset_class,
+        orderType: row.order_type,
+        entry: row.order_price ?? row.trigger_price ?? 'Market',
+        takeProfit: row.take_profit_price,
+        stopLoss: row.stop_loss_price,
+        timestamp: row.created_at,
+        triggered_at: row.triggered_at,
+        settled_at: row.settled_at,
+        status: statusMap[row.status] || row.status,
+        isClosed: row.is_active === false,
+        originalEmbed: cached?.originalEmbed,
       };
+    });
 
-      // originalEmbed (used to rebuild the Discord embed on status updates)
-      // isn't persisted in Supabase, only in this browser's cache — reuse it
-      // when we have it so same-browser reloads don't lose the embed's
-      // original fields. Trades loaded fresh on another device just won't
-      // have one, which handleUpdateTrade already tolerates.
-      const localCache = JSON.parse(localStorage.getItem('activeTrades') || '[]');
-      const cacheBySupabaseId = new Map(localCache.map(t => [t.supabaseId, t]));
+    activeTradesRef.current = trades;
+    setActiveTrades(trades);
+    localStorage.setItem('activeTrades', JSON.stringify(trades));
+  };
 
-      const trades = data.map(row => {
-        const cached = cacheBySupabaseId.get(row.id);
-        return {
-          id: row.discord_message_id || cached?.id || `local-${row.id}`,
-          supabaseId: row.id,
-          pair: row.pair_name,
-          orderType: row.order_type,
-          entry: row.order_price ?? row.trigger_price ?? 'Market',
-          takeProfit: row.take_profit_price,
-          stopLoss: row.stop_loss_price,
-          timestamp: row.created_at,
-          triggered_at: row.triggered_at,
-          settled_at: row.settled_at,
-          status: statusMap[row.status] || row.status,
-          isClosed: row.is_active === false,
-          originalEmbed: cached?.originalEmbed,
-        };
-      });
-
-      activeTradesRef.current = trades;
-      setActiveTrades(trades);
-      localStorage.setItem('activeTrades', JSON.stringify(trades));
-    };
-
+  useEffect(() => {
     loadTrades();
   }, []);
 
@@ -226,7 +231,7 @@ const CommandCenter = ({ session }) => {
 
     try {
       const { data: fnData, error: fnError } = await supabase.functions.invoke('broadcast-discord', {
-        body: { embed },
+        body: { embed, assetClass: formData.assetClass },
       });
       if (fnError) throw fnError;
       if (fnData?.id) messageId = fnData.id;
@@ -247,6 +252,7 @@ const CommandCenter = ({ session }) => {
         .insert([
           {
             pair_name: formData.pair.toUpperCase(),
+            asset_class: formData.assetClass,
             order_type: formData.orderType,
             order_price: formData.orderPrice ? parseFloat(formData.orderPrice) : null,
             stop_loss_price: formData.stopLoss ? parseFloat(formData.stopLoss) : null,
@@ -269,10 +275,14 @@ const CommandCenter = ({ session }) => {
         return;
       }
 
-      const newTrade = {
+      // originalEmbed isn't persisted in Supabase, so stash it in the local
+      // cache (keyed by supabaseId) before refetching — loadTrades reattaches
+      // it to the row that comes back from the database.
+      const newTradeForCache = {
         id: messageId,
         supabaseId: dbRecord?.id ?? null,
         pair: formData.pair.toUpperCase(),
+        assetClass: formData.assetClass,
         orderType: formData.orderType,
         entry: entry,
         takeProfit: formData.takeProfit || null,
@@ -283,8 +293,11 @@ const CommandCenter = ({ session }) => {
         status: isMarket ? 'TRIGGERED' : 'ACTIVE',
         originalEmbed: embed,
       };
+      localStorage.setItem('activeTrades', JSON.stringify([newTradeForCache, ...activeTradesRef.current]));
 
-      saveTrades([newTrade, ...activeTradesRef.current]);
+      // The database is the source of truth — re-fetch rather than
+      // optimistically appending the trade we just inserted.
+      await loadTrades();
 
       setAlert({
         show: true,
@@ -295,6 +308,7 @@ const CommandCenter = ({ session }) => {
       });
       setFormData({
         pair: '',
+        assetClass: ASSET_CLASSES[0],
         orderType: 'Buy Market',
         triggerPrice: '',
         orderPrice: '',
@@ -373,7 +387,7 @@ const CommandCenter = ({ session }) => {
       if (hasDiscordMessage) {
         try {
           const { error: fnError } = await supabase.functions.invoke('broadcast-discord', {
-            body: { embed: updatedEmbed, messageId: trade.id },
+            body: { embed: updatedEmbed, messageId: trade.id, assetClass: trade.assetClass },
           });
           if (fnError) throw fnError;
         } catch (discordError) {
@@ -491,6 +505,10 @@ const CommandCenter = ({ session }) => {
     }
   };
 
+  const filteredTrades = assetClassFilter === 'ALL'
+    ? activeTrades
+    : activeTrades.filter((trade) => trade.assetClass === assetClassFilter);
+
   return (
     <div className="min-h-screen bg-[#0d0f12] text-gray-200 p-4 font-sans flex justify-center items-start pt-10">
       {toast.show && (
@@ -544,7 +562,7 @@ const CommandCenter = ({ session }) => {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Pair/Asset & Order Type Row */}
+            {/* Pair/Asset & Asset Class Row */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
@@ -562,18 +580,18 @@ const CommandCenter = ({ session }) => {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
-                  Order Type
+                  Asset Class
                 </label>
                 <div className="relative">
                   <select
-                    name="orderType"
-                    value={formData.orderType}
+                    name="assetClass"
+                    value={formData.assetClass}
                     onChange={handleChange}
                     className="w-full bg-[#0d0f12] border border-[#23262e] rounded p-3 text-sm text-white appearance-none focus:outline-none focus:border-[#f3a910] transition-colors"
                   >
-                    {orderTypes.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
+                    {ASSET_CLASSES.map((assetClass) => (
+                      <option key={assetClass} value={assetClass}>
+                        {assetClass}
                       </option>
                     ))}
                   </select>
@@ -582,6 +600,32 @@ const CommandCenter = ({ session }) => {
                       <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
                     </svg>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Order Type Row */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">
+                Order Type
+              </label>
+              <div className="relative">
+                <select
+                  name="orderType"
+                  value={formData.orderType}
+                  onChange={handleChange}
+                  className="w-full bg-[#0d0f12] border border-[#23262e] rounded p-3 text-sm text-white appearance-none focus:outline-none focus:border-[#f3a910] transition-colors"
+                >
+                  {orderTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -691,23 +735,42 @@ const CommandCenter = ({ session }) => {
 
         {/* Active Trades Panel */}
         <div className="lg:col-span-7 bg-[#14161a] border border-[#23262e] rounded-lg shadow-2xl p-6 sm:p-8 self-start overflow-hidden">
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#23262e]">
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#23262e]">
             <h2 className="text-xl font-bold tracking-wider text-white uppercase">Today's Trades</h2>
             <span className="text-xs bg-[#23262e] px-3 py-1 rounded-full font-mono text-gray-300">
-              {activeTrades.length} Total
+              {filteredTrades.length} Total
             </span>
           </div>
 
-          {activeTrades.length === 0 ? (
+          {/* Asset Class Filter Navbar */}
+          <nav className="flex flex-wrap gap-2 mb-6">
+            {['ALL', ...ASSET_CLASSES].map((assetClass) => (
+              <button
+                key={assetClass}
+                type="button"
+                onClick={() => setAssetClassFilter(assetClass)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wide border transition-colors ${assetClassFilter === assetClass
+                  ? 'bg-[#f3a910] text-black border-[#f3a910]'
+                  : 'bg-[#0d0f12] text-gray-400 border-[#23262e] hover:border-[#f3a910]/50 hover:text-gray-200'
+                  }`}
+              >
+                {assetClass === 'ALL' ? 'All' : assetClass}
+              </button>
+            ))}
+          </nav>
+
+          {filteredTrades.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500">
               <svg className="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <p className="text-sm">No trades added today.</p>
+              <p className="text-sm">
+                {activeTrades.length === 0 ? 'No trades added today.' : 'No trades for this asset class today.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
-              {activeTrades.map((trade) => {
+              {filteredTrades.map((trade) => {
                 const isPending = pendingTradeIds.has(trade.id);
                 return (
                   <div key={trade.id} className="bg-[#0d0f12] border border-[#1c1e24] rounded-md p-4 flex flex-col gap-4">
@@ -720,6 +783,11 @@ const CommandCenter = ({ session }) => {
                             {trade.orderType}
                           </span>
                           <span className="font-mono font-bold text-white tracking-wider">{trade.pair}</span>
+                          {trade.assetClass && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide border bg-[#1c1e24] text-gray-400 border-[#2a2d36]">
+                              {trade.assetClass}
+                            </span>
+                          )}
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide border ${
                             trade.status === 'TP' ? 'bg-yellow-900/20 text-yellow-400 border-yellow-500/30' :
                             trade.status === 'SL' ? 'bg-red-900/20 text-red-400 border-red-500/30' :
