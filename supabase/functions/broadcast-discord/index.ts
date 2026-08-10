@@ -21,6 +21,10 @@ const ASSET_CLASS_ENV_VAR: Record<string, string> = {
   Indices: 'DISCORD_WEBHOOK_URL_INDICES',
 };
 
+// Every broadcast pings this role so members get notified of new setups and
+// status updates alike.
+const DISCORD_ROLE_ID = '1533827234106966127';
+
 const resolveWebhookUrl = (assetClass?: string): string | undefined => {
   const envVar = assetClass ? ASSET_CLASS_ENV_VAR[assetClass] : undefined;
   const specific = envVar ? Deno.env.get(envVar) : undefined;
@@ -76,7 +80,11 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Discord webhook not configured' }, 500);
   }
 
-  const payload = { embeds: [embed] };
+  const payload = {
+    content: `<@&${DISCORD_ROLE_ID}>`,
+    embeds: [embed],
+    allowed_mentions: { parse: ['roles'] },
+  };
   let discordResponse: Response;
 
   try {
