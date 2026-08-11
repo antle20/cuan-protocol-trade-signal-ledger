@@ -71,7 +71,7 @@ const CommandCenter = ({ session }) => {
     // localStorage, so we can't rely on that as the starting point.
     const { data, error } = await supabase
       .from('trade_histories')
-      .select('id, created_at, triggered_at, settled_at, status, pair_name, asset_class, order_type, order_price, trigger_price, take_profit_price, stop_loss_price, discord_message_id, is_active')
+      .select('id, created_at, triggered_at, settled_at, status, pair_name, asset_class, order_type, order_price, trigger_price, take_profit_price, stop_loss_price, discord_message_id, discord_embed, is_active')
       .or(`is_active.eq.true,created_at.gte.${startOfDay.toISOString()}`)
       .order('created_at', { ascending: false });
 
@@ -113,7 +113,9 @@ const CommandCenter = ({ session }) => {
         settled_at: row.settled_at,
         status: statusMap[row.status] || row.status,
         isClosed: row.is_active === false,
-        originalEmbed: cached?.originalEmbed,
+        // Supabase is the source of truth for the embed now; local cache is
+        // only a fallback for rows created before discord_embed existed.
+        originalEmbed: row.discord_embed ?? cached?.originalEmbed,
       };
     });
 
@@ -262,6 +264,7 @@ const CommandCenter = ({ session }) => {
             status: isMarket ? 'TRIGGERED' : 'ACTIVE',
             is_active: true,
             discord_message_id: discordFailed ? null : messageId,
+            discord_embed: embed,
             ...(isMarket && { triggered_at: new Date().toISOString() }),
           },
         ])
@@ -328,6 +331,25 @@ const CommandCenter = ({ session }) => {
     }
   };
 
+  // Rebuilds a base embed from the trade's own persisted fields for trades
+  // that predate discord_embed being saved (or were never cached in this
+  // browser) — keeps the ticker/prices visible instead of a status-only post.
+  const buildFallbackEmbed = (trade) => {
+    const isBuy = trade.orderType?.startsWith('Buy');
+    const fields = [{ name: 'Order Type', value: trade.orderType, inline: true }];
+    if (trade.entry && trade.entry !== 'Market') {
+      fields.push({ name: 'Order Price', value: String(trade.entry), inline: true });
+    }
+    if (trade.takeProfit) fields.push({ name: 'Take Profit', value: String(trade.takeProfit), inline: true });
+    if (trade.stopLoss) fields.push({ name: 'Stop Loss', value: String(trade.stopLoss), inline: true });
+    return {
+      title: `🚨 NEW SETUP: ${trade.pair} 🚨`,
+      color: isBuy ? 5763719 : 15548997,
+      fields,
+      timestamp: trade.timestamp || new Date().toISOString(),
+    };
+  };
+
   const handleUpdateTrade = async (trade, actionType) => {
     let color;
     let statusText;
@@ -357,12 +379,16 @@ const CommandCenter = ({ session }) => {
     markPending(trade.id);
 
     try {
-      // Filter out old update status if it exists (originalEmbed may be
-      // missing on corrupted/legacy trade records — don't let that crash the click)
-      const filteredFields = (trade.originalEmbed?.fields ?? []).filter(f => f.name !== 'Update Status');
+      // Missing on trade records from before discord_embed was persisted (or
+      // loaded in a session that never cached it) — rebuild one rather than
+      // posting a status-only update that drops the ticker and prices.
+      const baseEmbed = trade.originalEmbed ?? buildFallbackEmbed(trade);
+
+      // Filter out old update status if it exists
+      const filteredFields = (baseEmbed.fields ?? []).filter(f => f.name !== 'Update Status');
 
       const updatedEmbed = {
-        ...trade.originalEmbed,
+        ...baseEmbed,
         color: color,
         fields: [
           ...filteredFields,
@@ -384,12 +410,22 @@ const CommandCenter = ({ session }) => {
       // would post a brand-new message instead of editing the original one.
       const hasDiscordMessage = trade.id && !String(trade.id).startsWith('local-');
 
+      // If the original message lived on a webhook that's no longer the one
+      // resolved for this trade's asset class (e.g. a per-class webhook secret
+      // was added/rotated after the message was posted), broadcast-discord
+      // recreates it on the current webhook and hands back the new id — track
+      // it here so the Supabase update below keeps discord_message_id in sync.
+      let newMessageId = null;
+
       if (hasDiscordMessage) {
         try {
-          const { error: fnError } = await supabase.functions.invoke('broadcast-discord', {
+          const { data: fnData, error: fnError } = await supabase.functions.invoke('broadcast-discord', {
             body: { embed: updatedEmbed, messageId: trade.id, assetClass: trade.assetClass },
           });
           if (fnError) throw fnError;
+          if (fnData?.recreated && fnData?.id) {
+            newMessageId = fnData.id;
+          }
         } catch (discordError) {
           console.error('Discord update failed:', discordError);
           discordFailed = true;
@@ -413,10 +449,15 @@ const CommandCenter = ({ session }) => {
         const updatePayload = {
           status: statusMap[actionType],
           updated_at: new Date().toISOString(),
+          discord_embed: updatedEmbed,
         };
 
         if (actionType === 'TRIGGERED') {
           updatePayload.triggered_at = new Date().toISOString();
+        }
+
+        if (newMessageId) {
+          updatePayload.discord_message_id = newMessageId;
         }
 
         const { error: updateError } = await supabase
@@ -435,6 +476,9 @@ const CommandCenter = ({ session }) => {
       const updatedTrade = { ...trade, originalEmbed: updatedEmbed, status: actionType };
       if (actionType === 'TRIGGERED') {
         updatedTrade.triggered_at = new Date().toISOString();
+      }
+      if (newMessageId) {
+        updatedTrade.id = newMessageId;
       }
       const newTrades = activeTradesRef.current.map(t => t.id === trade.id ? updatedTrade : t);
       saveTrades(newTrades);

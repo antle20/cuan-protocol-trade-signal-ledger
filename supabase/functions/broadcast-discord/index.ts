@@ -85,7 +85,23 @@ Deno.serve(async (req) => {
     embeds: [embed],
     allowed_mentions: { parse: ['roles'] },
   };
+
+  const postNewMessage = async (): Promise<Response> => {
+    const postUrl = new URL(webhookUrl);
+    postUrl.searchParams.set('wait', 'true');
+    return fetch(postUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  };
+
   let discordResponse: Response;
+  // Set when a PATCH target no longer exists on the resolved webhook (e.g. the
+  // asset class's webhook secret was reconfigured after this message was
+  // originally posted, so the message lives on a different, now-unreachable
+  // webhook) and we fell back to posting a brand-new message instead.
+  let recreated = false;
 
   try {
     if (messageId) {
@@ -95,14 +111,13 @@ Deno.serve(async (req) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      if (discordResponse.status === 404) {
+        discordResponse = await postNewMessage();
+        recreated = true;
+      }
     } else {
-      const postUrl = new URL(webhookUrl);
-      postUrl.searchParams.set('wait', 'true');
-      discordResponse = await fetch(postUrl.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      discordResponse = await postNewMessage();
     }
   } catch (e) {
     return jsonResponse({ error: `Discord request failed: ${e}` }, 502);
@@ -116,5 +131,5 @@ Deno.serve(async (req) => {
   const contentType = discordResponse.headers.get('content-type') || '';
   const discordData = contentType.includes('application/json') ? await discordResponse.json() : null;
 
-  return jsonResponse({ id: discordData?.id ?? messageId ?? null }, 200);
+  return jsonResponse({ id: discordData?.id ?? messageId ?? null, recreated }, 200);
 });
