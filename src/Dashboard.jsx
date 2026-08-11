@@ -86,6 +86,7 @@ const CommandCenter = ({ session }) => {
       TP_HIT: 'TP',
       SL_HIT: 'SL',
       MANUALLY_CLOSED: 'CLOSE',
+      CANCELLED: 'CANCEL',
       ACTIVE: 'ACTIVE',
     };
 
@@ -371,6 +372,10 @@ const CommandCenter = ({ session }) => {
         color = 9807270; // Gray
         statusText = "⚠️ MANUALLY CLOSED - Intervened";
         break;
+      case 'CANCEL':
+        color = 9807270; // Gray
+        statusText = "❌ ORDER CANCELLED - Setup Voided";
+        break;
       default:
         return;
     }
@@ -444,6 +449,7 @@ const CommandCenter = ({ session }) => {
           TP: 'TP_HIT',
           SL: 'SL_HIT',
           CLOSE: 'MANUALLY_CLOSED',
+          CANCEL: 'CANCELLED',
         };
 
         const updatePayload = {
@@ -454,6 +460,14 @@ const CommandCenter = ({ session }) => {
 
         if (actionType === 'TRIGGERED') {
           updatePayload.triggered_at = new Date().toISOString();
+        }
+
+        // A cancelled order never traded, so there's nothing left to settle
+        // manually — mark it inactive right away instead of leaving it for
+        // the separate Active/Settled toggle.
+        if (actionType === 'CANCEL') {
+          updatePayload.is_active = false;
+          updatePayload.settled_at = new Date().toISOString();
         }
 
         if (newMessageId) {
@@ -476,6 +490,10 @@ const CommandCenter = ({ session }) => {
       const updatedTrade = { ...trade, originalEmbed: updatedEmbed, status: actionType };
       if (actionType === 'TRIGGERED') {
         updatedTrade.triggered_at = new Date().toISOString();
+      }
+      if (actionType === 'CANCEL') {
+        updatedTrade.isClosed = true;
+        updatedTrade.settled_at = new Date().toISOString();
       }
       if (newMessageId) {
         updatedTrade.id = newMessageId;
@@ -837,9 +855,10 @@ const CommandCenter = ({ session }) => {
                             trade.status === 'SL' ? 'bg-red-900/20 text-red-400 border-red-500/30' :
                             trade.status === 'TRIGGERED' ? 'bg-blue-900/20 text-blue-400 border-blue-500/30' :
                             trade.status === 'CLOSE' ? 'bg-gray-800 text-gray-400 border-gray-600' :
+                            trade.status === 'CANCEL' ? 'bg-gray-800 text-gray-500 border-gray-600' :
                             'bg-[#1c1e24] text-gray-500 border-[#2a2d36]' // ACTIVE
                           }`}>
-                            {trade.status === 'CLOSE' ? 'MANUAL CLOSE' : trade.status}
+                            {trade.status === 'CLOSE' ? 'MANUAL CLOSE' : trade.status === 'CANCEL' ? 'CANCELLED' : trade.status}
                           </span>
                         </div>
                         <div className="text-xs text-gray-500 font-mono flex flex-col gap-1 mt-2">
@@ -869,12 +888,16 @@ const CommandCenter = ({ session }) => {
                     </div>
 
                     {/* Action Buttons */}
-                    {trade.isClosed ? (
+                    {trade.status === 'CANCEL' ? (
+                      <div className="bg-[#1c1e24] border border-[#23262e] rounded p-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        Order Cancelled
+                      </div>
+                    ) : trade.isClosed ? (
                       <div className="bg-[#1c1e24] border border-[#23262e] rounded p-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         Trade Settled
                       </div>
                     ) : (
-                      <div className={`grid gap-2 ${trade.status !== 'ACTIVE' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1'}`}>
+                      <div className={`grid gap-2 ${trade.status !== 'ACTIVE' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2'}`}>
                         <button
                           onClick={() => handleUpdateTrade(trade, 'TRIGGERED')}
                           disabled={trade.status !== 'ACTIVE' || isPending}
@@ -883,6 +906,16 @@ const CommandCenter = ({ session }) => {
                         >
                           Triggered
                         </button>
+                        {trade.status === 'ACTIVE' && (
+                          <button
+                            onClick={() => handleUpdateTrade(trade, 'CANCEL')}
+                            disabled={isPending}
+                            className={`bg-gray-800 border border-gray-600 text-gray-300 text-xs py-2 px-2 rounded transition-colors font-semibold tracking-wide ${isPending ? 'opacity-30 cursor-not-allowed' : 'hover:bg-gray-700'
+                              }`}
+                          >
+                            Cancel
+                          </button>
+                        )}
                         {trade.status !== 'ACTIVE' && (
                           <>
                             <button
