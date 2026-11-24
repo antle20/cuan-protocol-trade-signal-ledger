@@ -6,4 +6,9 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: '/cuan-protocol-trade-signal-ledger/',
+  server: {
+    watch: {
+      ignored: ['**/gotobi_usdjpy_mc_local/**', '**/*.xlsx'],
+    },
+  },
 })

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import MonteCarloSimulator from './MonteCarloSimulator';
 
 const ASSET_CLASSES = ['Crypto', 'Forex', 'Commodities', 'Indices'];
 
@@ -15,6 +16,7 @@ const CommandCenter = ({ session }) => {
     notes: '',
   });
   const [assetClassFilter, setAssetClassFilter] = useState('ALL');
+  const [mainTab, setMainTab] = useState('signals'); // 'signals' | 'montecarlo'
 
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
@@ -583,28 +585,60 @@ const CommandCenter = ({ session }) => {
           {toast.message}
         </div>
       )}
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8">
-
-        {/* Main Form Panel */}
-        <div className="lg:col-span-5 bg-[#14161a] border border-[#23262e] rounded-lg shadow-2xl p-6 sm:p-8 self-start">
-          <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#23262e]">
+      <div className="w-full max-w-6xl flex flex-col gap-6">
+        {/* Global Navigation Header */}
+        <div className="bg-[#14161a] border border-[#23262e] rounded-lg shadow-xl px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-6">
             <div>
-              <h1 className="text-xl font-bold tracking-wider text-white">COMMAND CENTER</h1>
-              <p className="text-xs text-gray-500 mt-1 uppercase tracking-widest">Signal Blaster</p>
+              <h1 className="text-base font-bold tracking-wider text-white">COMMAND CENTER</h1>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest">Cuan Protocol</p>
             </div>
-            <div className="flex items-center gap-3">
-              {session?.user?.email && (
-                <span className="text-[11px] text-gray-500 font-mono hidden sm:inline">{session.user.email}</span>
-              )}
+
+            <div className="flex items-center bg-[#0d0f12] p-1 rounded-lg border border-[#23262e]">
               <button
-                onClick={handleLogout}
-                className="text-[10px] px-2 py-1 rounded font-bold tracking-wider uppercase bg-[#1c1e24] text-gray-400 hover:bg-[#23262e] hover:text-gray-200 border border-[#23262e] transition-colors"
+                onClick={() => setMainTab('signals')}
+                className={`text-xs px-3.5 py-1.5 rounded-md font-semibold transition-all ${mainTab === 'signals'
+                    ? 'bg-[#f3a910] text-black shadow'
+                    : 'text-gray-400 hover:text-white'
+                  }`}
               >
-                Sign Out
+                Signals & Ledger
               </button>
-              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+              <button
+                onClick={() => setMainTab('montecarlo')}
+                className={`text-xs px-3.5 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${mainTab === 'montecarlo'
+                    ? 'bg-[#f3a910] text-black shadow'
+                    : 'text-gray-400 hover:text-white'
+                  }`}
+              >
+                <span>Monte Carlo Simulator</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-black/25 font-bold uppercase tracking-wider">PRO</span>
+              </button>
             </div>
           </div>
+
+          <div className="flex items-center gap-3">
+            {session?.user?.email && (
+              <span className="text-[11px] text-gray-500 font-mono hidden sm:inline">{session.user.email}</span>
+            )}
+            <button
+              onClick={handleLogout}
+              className="text-[10px] px-2.5 py-1.5 rounded font-bold tracking-wider uppercase bg-[#1c1e24] text-gray-400 hover:bg-[#23262e] hover:text-gray-200 border border-[#23262e] transition-colors"
+            >
+              Sign Out
+            </button>
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+          </div>
+        </div>
+
+        {mainTab === 'signals' ? (
+          <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Main Form Panel */}
+            <div className="lg:col-span-5 bg-[#14161a] border border-[#23262e] rounded-lg shadow-2xl p-6 sm:p-8 self-start">
+              <div className="mb-6 pb-3 border-b border-[#23262e]">
+                <h2 className="text-sm font-bold tracking-wider text-white uppercase">Broadcast New Signal</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Post to Discord & Save to Supabase</p>
+              </div>
 
           {!isSupabaseConfigured && (
             <div className="mb-6 p-4 rounded-md text-sm border bg-red-900/20 border-red-500/50 text-red-400">
@@ -953,7 +987,11 @@ const CommandCenter = ({ session }) => {
           )}
         </div>
       </div>
-    </div>
+    ) : (
+      <MonteCarloSimulator supabaseTrades={activeTrades} />
+    )}
+  </div>
+</div>
   );
 };
 
