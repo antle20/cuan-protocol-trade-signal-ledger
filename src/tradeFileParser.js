@@ -240,12 +240,15 @@ export function extractTradesFromRows(rows, filename = '', options = {}) {
     }
   }
 
-  // Detect In-Sample / Out-of-Sample tag from filename if present
+  // Detect In-Sample / Out-of-Sample tag from filename if present (strict boundary match)
   let fileSampleTag = 'ALL';
   const lowerName = filename.toLowerCase();
-  if (lowerName.includes('_a') || lowerName.includes('in-sample') || lowerName.includes('is') || lowerName.includes('2016-2021') || lowerName.includes('2024')) {
+  const isTagIS = /(?:^|[_\- .])(in[-_ ]?sample|is|file[-_ ]?a)(?:[_\- .]|$)/i.test(lowerName) || lowerName.endsWith('_a') || lowerName.includes('_a.');
+  const isTagOOS = /(?:^|[_\- .])(out[-_ ]?of[-_ ]?sample|oos|file[-_ ]?b)(?:[_\- .]|$)/i.test(lowerName) || lowerName.endsWith('_b') || lowerName.includes('_b.');
+
+  if (isTagIS && !isTagOOS) {
     fileSampleTag = 'IS';
-  } else if (lowerName.includes('_b') || lowerName.includes('out-of-sample') || lowerName.includes('oos') || lowerName.includes('2022-2026') || lowerName.includes('2025') || lowerName.includes('2026')) {
+  } else if (isTagOOS && !isTagIS) {
     fileSampleTag = 'OOS';
   }
 

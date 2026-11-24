@@ -21,6 +21,8 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
   // Datasets for In-Sample (IS), Out-of-Sample (OOS), and Combined (ALL)
   const [isDataset, setIsDataset] = useState(null);
   const [oosDataset, setOosDataset] = useState(null);
+  const [fullDataset, setFullDataset] = useState(null); // Keeps the unmodified single file dataset
+  const [isDualFileMode, setIsDualFileMode] = useState(false); // true if uploaded separately as File A & File B
   const [activeView, setActiveView] = useState('ALL'); // 'ALL' | 'IS' | 'OOS' | 'COMPARE'
 
   // Starts as null for clean, professional onboarding UX
@@ -31,7 +33,7 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [splitOption, setSplitOption] = useState('70-30'); // '70-30' | '80-20' | '50-50' | '2022'
+  const [splitOption, setSplitOption] = useState('none'); // 'none' | '70-30' | '80-20' | '50-50' | '2022'
   const [isDragging, setIsDragging] = useState(false);
 
   const [params, setParams] = useState({
@@ -65,40 +67,35 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
     if (!file) return;
     setErrorMsg('');
     setIsProcessing(true);
+    setIsDualFileMode(false);
     try {
       const parsed = await parseTradeFile(file);
+      setFullDataset(parsed);
+      setCurrentDataset(parsed);
 
-      if (parsed.sampleTag === 'IS') {
-        setIsDataset(parsed);
-        setCurrentDataset(parsed);
-        const res = runSim(parsed);
-        setIsSimResult(res);
-        setSimResult(res);
-        setActiveView('IS');
-      } else if (parsed.sampleTag === 'OOS') {
-        setOosDataset(parsed);
-        setCurrentDataset(parsed);
-        const res = runSim(parsed);
-        setOosSimResult(res);
-        setSimResult(res);
-        setActiveView('OOS');
-      } else {
+      const resAll = runSim(parsed);
+      setSimResult(resAll);
+      setActiveView('ALL');
+
+      // Auto-split into IS and OOS if splitOption !== 'none'
+      if (splitOption !== 'none') {
         const has2022 = parsed.startDate.getFullYear() < 2022 && parsed.endDate.getFullYear() >= 2022;
+        const effectiveOption = splitOption === 'auto' ? (has2022 ? '2022' : '70-30') : splitOption;
         const { isDataset: isDs, oosDataset: oosDs } = splitDataset(
           parsed,
-          has2022 ? 'date' : 'ratio',
-          has2022 ? '2022-01-01' : 0.7
+          effectiveOption === '2022' ? 'date' : 'ratio',
+          effectiveOption === '2022' ? '2022-01-01' : (effectiveOption === '80-20' ? 0.8 : effectiveOption === '50-50' ? 0.5 : 0.7)
         );
 
         setIsDataset(isDs);
         setOosDataset(oosDs);
-        setCurrentDataset(parsed);
-
-        const resAll = runSim(parsed);
-        setSimResult(resAll);
         if (isDs) setIsSimResult(runSim(isDs));
         if (oosDs) setOosSimResult(runSim(oosDs));
-        setActiveView('ALL');
+      } else {
+        setIsDataset(null);
+        setOosDataset(null);
+        setIsSimResult(null);
+        setOosSimResult(null);
       }
     } catch (err) {
       console.error(err);
@@ -138,6 +135,8 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
     if (!file) return;
     setErrorMsg('');
     setIsProcessing(true);
+    setIsDualFileMode(true);
+    setFullDataset(null);
     try {
       const parsed = await parseTradeFile(file);
       parsed.sourceName = `${file.name} (In-Sample)`;
@@ -171,6 +170,8 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
     if (!file) return;
     setErrorMsg('');
     setIsProcessing(true);
+    setIsDualFileMode(true);
+    setFullDataset(null);
     try {
       const parsed = await parseTradeFile(file);
       parsed.sourceName = `${file.name} (Out-of-Sample)`;
@@ -221,20 +222,32 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
   // Load sample demo data on explicit user request
   const handleLoadDemo = () => {
     setErrorMsg('');
+    setIsDualFileMode(false);
     const demo = buildTradeDataset(SAMPLE_DEMO_TRADES, 'Sample Gotobi Demo Data', 'ALL');
-    const { isDataset: isDs, oosDataset: oosDs } = splitDataset(demo, 'ratio', 0.7);
-    setIsDataset(isDs);
-    setOosDataset(oosDs);
+    setFullDataset(demo);
     setCurrentDataset(demo);
     const res = runSim(demo);
     setSimResult(res);
-    if (isDs) setIsSimResult(runSim(isDs));
-    if (oosDs) setOosSimResult(runSim(oosDs));
+
+    if (splitOption !== 'none') {
+      const { isDataset: isDs, oosDataset: oosDs } = splitDataset(demo, 'ratio', 0.7);
+      setIsDataset(isDs);
+      setOosDataset(oosDs);
+      if (isDs) setIsSimResult(runSim(isDs));
+      if (oosDs) setOosSimResult(runSim(oosDs));
+    } else {
+      setIsDataset(null);
+      setOosDataset(null);
+      setIsSimResult(null);
+      setOosSimResult(null);
+    }
     setActiveView('ALL');
   };
 
   // Reset to clean empty state
   const handleReset = () => {
+    setIsDualFileMode(false);
+    setFullDataset(null);
     setIsDataset(null);
     setOosDataset(null);
     setIsSimResult(null);
@@ -247,8 +260,19 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
 
   const handleSplitOptionChange = (newOption) => {
     setSplitOption(newOption);
-    const baseDataset = isDataset && oosDataset ? combineDatasets(isDataset, oosDataset) : currentDataset;
+    const baseDataset = fullDataset || (isDataset && oosDataset ? combineDatasets(isDataset, oosDataset) : currentDataset);
     if (!baseDataset || baseDataset.trades.length < 4) return;
+
+    if (newOption === 'none') {
+      setIsDataset(null);
+      setOosDataset(null);
+      setIsSimResult(null);
+      setOosSimResult(null);
+      setCurrentDataset(baseDataset);
+      setSimResult(runSim(baseDataset));
+      setActiveView('ALL');
+      return;
+    }
 
     let isDs = null;
     let oosDs = null;
@@ -285,10 +309,10 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
       setCurrentDataset(oosDataset);
       setSimResult(oosSimResult || runSim(oosDataset));
     } else if (view === 'ALL') {
-      if (isDataset && oosDataset) {
-        const combined = combineDatasets(isDataset, oosDataset);
-        setCurrentDataset(combined);
-        setSimResult(runSim(combined));
+      const allDs = fullDataset || (isDataset && oosDataset ? combineDatasets(isDataset, oosDataset) : currentDataset);
+      if (allDs) {
+        setCurrentDataset(allDs);
+        setSimResult(runSim(allDs));
       }
     }
   };
@@ -710,7 +734,11 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
 
               {/* Controls: Auto-Split & 1R Unit info */}
               <div className="flex flex-wrap items-center gap-3">
-                {!(isDataset && oosDataset) ? (
+                {isDualFileMode ? (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-900/20 border border-green-500/30 rounded text-[11px] text-green-400 font-semibold">
+                    <span>✓ File A (IS) &amp; File B (OOS) Terpisah</span>
+                  </div>
+                ) : (
                   <div className="flex items-center gap-1.5">
                     <span className="text-[11px] text-gray-400 uppercase font-semibold">Auto-Split:</span>
                     <select
@@ -718,15 +746,12 @@ const MonteCarloSimulator = ({ supabaseTrades = [] }) => {
                       onChange={(e) => handleSplitOptionChange(e.target.value)}
                       className="bg-[#0d0f12] border border-[#23262e] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#f3a910]"
                     >
+                      <option value="none">Tanpa Split (100% Single File)</option>
                       <option value="70-30">70% IS / 30% OOS (Standar)</option>
                       <option value="80-20">80% IS / 20% OOS (Pareto)</option>
                       <option value="50-50">50% IS / 50% OOS (Setengah)</option>
                       <option value="2022">Cutoff 2022-01-01 (Gotobi)</option>
                     </select>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-green-900/20 border border-green-500/30 rounded text-[11px] text-green-400 font-semibold">
-                    <span>✓ File A (IS) &amp; File B (OOS) Terpisah</span>
                   </div>
                 )}
 
