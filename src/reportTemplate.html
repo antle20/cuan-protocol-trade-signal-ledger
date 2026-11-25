@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gotobi USDJPY 09:55 short · Monte Carlo interaktif · ANUBIS</title>
+<style>
+:root{
+  --bg:#faf9f5; --panel:#ffffff; --panel2:#f3f1ea; --ink:#1f1e1d; --muted:#6b6a65; --line:#e6e2d8;
+  --accent:#c96442; --accent2:#e8a68f; --is:#2f6fd6; --oos:#c96442; --good:#2e8b57; --bad:#c0392b; --warn:#b7791f;
+  --band1:rgba(47,111,214,.12); --band2:rgba(47,111,214,.22); --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 14px rgba(0,0,0,.04);
+}
+html.dark{
+  --bg:#1c1b19; --panel:#262522; --panel2:#2f2d29; --ink:#ecebe6; --muted:#a3a198; --line:#3a3833;
+  --accent:#e0805e; --accent2:#a85a3f; --is:#6ea1f2; --oos:#e0805e; --good:#5cc08a; --bad:#ef6f61; --warn:#e3b34d;
+  --band1:rgba(110,161,242,.13); --band2:rgba(110,161,242,.25); --shadow:none;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:22px 22px 60px}
+header.top{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:17px;margin:26px 0 10px;letter-spacing:-.01em}
+h3{font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.sub{color:var(--muted);font-size:13px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.badge{font-size:11.5px;padding:3px 9px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.badge.is{color:var(--is);border-color:var(--is)} .badge.oos{color:var(--oos);border-color:var(--oos)}
+button,select,input{font:inherit;color:inherit}
+.btn{border:1px solid var(--line);background:var(--panel);padding:6px 12px;border-radius:9px;cursor:pointer;transition:.15s}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover{filter:brightness(1.07)}
+.tabs{display:flex;gap:4px;margin:20px 0 4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:none;background:none;padding:10px 14px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;font-weight:500}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--ink)}
+.pane{display:none;animation:fade .25s ease}
+.pane.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))} .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))} .g6{grid-template-columns:repeat(6,minmax(0,1fr))}
+@media(max-width:900px){.g2,.g3,.g4,.g6{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+.kpi .lab{font-size:12px;color:var(--muted)}
+.kpi .val{font-size:21px;font-weight:650;letter-spacing:-.01em;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .small{font-size:12px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.split-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.verdict{border-left:4px solid var(--accent);background:var(--panel);padding:14px 18px;border-radius:0 14px 14px 0;border:1px solid var(--line);border-left-width:4px}
+.verdict li{margin:5px 0}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end}
+.ctl{display:flex;flex-direction:column;gap:4px;min-width:120px}
+.ctl label{font-size:12px;color:var(--muted)}
+.ctl select,.ctl input[type=number],.ctl input[type=text]{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 8px;min-width:110px}
+.ctl input[type=range]{accent-color:var(--accent);width:170px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+.seg button{border:none;background:none;padding:6px 12px;cursor:pointer;color:var(--muted)}
+.seg button.on{background:var(--accent);color:#fff}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:12.8px}
+th,td{padding:6px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel2);font-weight:600;color:var(--muted);font-size:12px;cursor:default}
+th:first-child,td:first-child{text-align:left}
+tr:hover td{background:var(--panel2)}
+tr.hl td{background:color-mix(in srgb,var(--accent) 14%,transparent)!important;font-weight:600}
+tr.key td{font-weight:600}
+tr.mean td{border-top:2px solid var(--line);color:var(--muted)}
+th .tail{display:block;font-weight:400;font-size:10.5px}
+.tail.low{color:var(--bad)} .tail.high{color:var(--bad)}
+td.inv{color:var(--muted)}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.axis text{fill:var(--muted);font-size:11px}
+.axis line,.axis path{stroke:var(--line)}
+.gridline{stroke:var(--line);stroke-dasharray:2 3}
+#tip{position:fixed;pointer-events:none;z-index:50;background:var(--ink);color:var(--bg);padding:7px 10px;border-radius:8px;font-size:12px;line-height:1.45;opacity:0;transition:opacity .1s;max-width:320px;font-variant-numeric:tabular-nums;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.note{color:var(--muted);font-size:12.5px;margin:6px 0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:6px 0}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{display:inline-block;width:16px;height:3px;border-radius:2px}
+.progress{height:4px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-top:8px}
+.progress div{height:100%;width:0;background:var(--accent);transition:width .1s}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:600}
+.pill.good{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.pill.bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.rankbar{position:relative;height:8px;background:linear-gradient(90deg,color-mix(in srgb,var(--bad) 35%,transparent) 0 5%,var(--panel2) 5% 95%,color-mix(in srgb,var(--bad) 35%,transparent) 95%);border-radius:4px;min-width:140px}
+.rankbar b{position:absolute;top:-3px;width:3px;height:14px;background:var(--ink);border-radius:2px}
+.colpick{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px;color:var(--muted)}
+.colpick label{display:inline-flex;gap:4px;align-items:center;cursor:pointer}
+.err{display:none;background:var(--bad);color:#fff;padding:8px 12px;border-radius:8px;margin:10px 0}
+footer{margin-top:40px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:12px}
+code{background:var(--panel2);padding:1px 5px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="tip"></div>
+<div class="wrap">
+<div id="jserr" class="err"></div>
+<header class="top">
+  <div>
+    <h1>Gotobi USDJPY 09:55 JST short — Monte Carlo interaktif</h1>
+    <div class="sub">ANUBIS · TradingView OANDA:USDJPY 5m · SL 10 pip, tanpa TP, exit 11:30 JST · sizing 2% dari $100k (cap 20 lot)</div>
+    <div class="badges">
+      <span class="badge is">IN-SAMPLE 2005–2015 · 553 trade</span>
+      <span class="badge oos">OUT-OF-SAMPLE 2016–2026 · 544 trade (quasi-OOS)</span>
+      <span class="badge">10.000 path / metode · seed 20261114</span>
+      <span class="badge warn">Fill TradingView (tanpa spread ask) — batas atas</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px"><button class="btn" id="themeBtn">◐ Tema</button></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="sum">Ringkasan</button>
+  <button class="tab" data-tab="wr">Ekspektasi win rate</button>
+  <button class="tab" data-tab="tbl">Tabel percentile</button>
+  <button class="tab" data-tab="cagr">CAGR &amp; compounding</button>
+  <button class="tab" data-tab="sim">Simulator live</button>
+  <button class="tab" data-tab="xc">Cross-check &amp; biaya</button>
+  <button class="tab" data-tab="lim">Asumsi</button>
+</nav>
+
+<!-- ======================= RINGKASAN ======================= -->
+<section class="pane active" id="pane-sum">
+  <h2>Kesimpulan</h2>
+  <div class="verdict"><ul style="margin:0;padding-left:18px" id="verdictList"></ul></div>
+  <h2>Angka utama (hasil asli + band resample P5 / P50 / P95)</h2>
+  <div class="grid g2" id="sumCards"></div>
+  <h2>Equity aktual 2005–2026 (urutan asli, kumulatif $)</h2>
+  <div class="card"><div class="chart" id="eqActual"></div>
+    <div class="legend"><span><i style="background:var(--is)"></i>IS 2005–2015</span><span><i style="background:var(--oos)"></i>OOS 2016–2026</span></div></div>
+  <h2>Per tahun</h2>
+  <div class="card">
+    <div class="controls" style="margin-bottom:8px"><div class="seg" id="yearSeg"><button class="on" data-v="net">Net profit $</button><button data-v="wr">Win rate %</button><button data-v="pips">Pip / trade</button></div></div>
+    <div class="chart" id="yearChart"></div>
+  </div>
+</section>
+
+<!-- ======================= WIN RATE ======================= -->
+<section class="pane" id="pane-wr">
+  <h2>Ekspektasi win rate</h2>
+  <p class="note">Win = net P&amp;L &gt; 0 (setelah komisi). Breakeven win rate = avg loss / (avg win + avg loss), yaitu win rate minimum supaya ekspektasi ≥ 0 dengan rasio payoff yang terukur. Ekspektasi per horizon = bootstrap indikator menang/kalah (20.000 iterasi, seed 20261115).</p>
+  <div class="grid g2" id="wrCards"></div>
+  <h2>Distribusi win rate per horizon</h2>
+  <div class="card">
+    <div class="controls" style="margin-bottom:10px">
+      <div class="ctl"><label>Split</label><div class="seg" id="wrSplitSeg"><button class="on" data-v="IS">IS 2005–2015</button><button data-v="OOS">OOS 2016–2026</button></div></div>
+      <div class="ctl"><label>Kolom</label><div class="seg" id="wrColSeg"><button class="on" data-v="key">Ringkas</button><button data-v="all">P5 … P95</button></div></div>
+    </div>
+    <div class="tablewrap" id="wrHorizonTable"></div>
+    <p class="note">Horizon pendek = rentang lebih lebar. Dengan ±50 trade (≈1 tahun) win rate bisa jatuh jauh di bawah breakeven walaupun edge-nya nyata. Kolom “P(&lt; BE)” = peluang win rate horizon itu di bawah breakeven split-nya.</p>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><h3>Histogram win rate (bootstrap, N = seluruh split)</h3><div class="chart" id="wrHist"></div>
+      <div class="legend"><span><i style="background:var(--ink)"></i>aktual</span><span><i style="background:var(--bad)"></i>breakeven</span><span><i style="background:var(--muted)"></i>split lain (aktual)</span></div></div>
+    <div class="card"><h3>Win rate vs biaya tambahan (pip/trade)</h3><div class="tablewrap" id="wrHaircut"></div>
+      <p class="note">Biaya tambahan memotong setiap trade (mis. spread ask saat buy-back yang tidak dihitung TradingView). Margin = win rate − breakeven.</p></div>
+  </div>
+  <h2>Rolling win rate (50 trade) 2005–2026</h2>
+  <div class="card"><div class="chart" id="wrRoll"></div>
+    <div class="legend"><span><i style="background:var(--is)"></i>rolling WR (IS)</span><span><i style="background:var(--oos)"></i>rolling WR (OOS)</span><span><i style="background:var(--bad)"></i>breakeven IS / OOS</span><span><i style="background:var(--muted)"></i>50%</span></div>
+    <p class="note">Breakeven tidak konstan: di OOS winner-nya lebih besar (payoff lebih tinggi), jadi breakeven-nya lebih rendah. Win rate OOS yang lebih rendah belum tentu berarti edge-nya lebih lemah. Lihat margin di atas breakeven.</p></div>
+</section>
+
+<!-- ======================= TABEL ======================= -->
+<section class="pane" id="pane-tbl">
+  <h2>Tabel percentile kanonik (Python, seed 20261114, 10.000 path)</h2>
+  <div class="card">
+    <div class="controls">
+      <div class="ctl"><label>Split</label><div class="seg" id="tSplit"><button class="on" data-v="IS">IS 2005–2015</button><button data-v="OOS">OOS 2016–2026</button></div></div>
+      <div class="ctl"><label>Metode</label><div class="seg" id="tMeth"><button class="on" data-v="resample">Resample</button><button data-v="shuffle">Shuffle</button><button data-v="block">Block bootstrap</button></div></div>
+      <div class="ctl"><label>Sorot percentile: <b id="tPctLab">P50</b></label><input type="range" id="tPct" min="5" max="95" step="5" value="50"></div>
+      <button class="btn" id="tCsv">⬇ CSV</button>
+    </div>
+    <div class="colpick" id="tCols" style="margin:10px 0"></div>
+    <div class="tablewrap" id="tTable"></div>
+    <p class="note" id="tNote"></p>
+  </div>
+  <div class="grid g3" style="margin-top:12px" id="tSpot"></div>
+</section>
+
+<!-- ======================= CAGR ======================= -->
+<section class="pane" id="pane-cagr">
+  <h2>CAGR &amp; skenario tarik 50% / compound 50%</h2>
+  <div class="card note" style="color:var(--ink)">
+    <b>Kebijakan</b>, dihitung di akhir setiap tahun kalender (JST):
+    <ul style="margin:6px 0 4px;padding-left:18px">
+      <li><b>Fixed $</b>: risk selalu 2% dari $100k (tanpa compound, tanpa tarikan). CAGR di sini dari pertumbuhan linear.</li>
+      <li><b>Tarik 50% / compound 50%</b>: kalau net tahun itu positif, 50% ditarik dan 50% tetap di akun. Basis sizing tahun berikutnya = equity setelah tarikan. Tahun rugi: tidak ada tarikan dan tidak ada top-up. Tidak ada tarikan setelah tahun terakhir (parsial).</li>
+      <li><b>100% compound</b>: tidak ada tarikan; basis sizing di-reset ke equity setiap Januari (pembanding).</li>
+    </ul>
+    <b>Sizing:</b> <i>seperti export</i> = P&amp;L TradingView diskalakan dengan equity, jadi efek cap 20 lot ikut (risk efektif ±1,3–2%). <i>True 2%</i> = setiap trade dinormalisasi ke R (P&amp;L ÷ risk stop 10 pip trade itu) × 2% equity, tanpa cap lot.
+    <b>CAGR equity</b> = (equity akhir / $100k)^(1/tahun) − 1. <b>CAGR equity+tarikan</b> = ((equity akhir + total ditarik) / $100k)^(1/tahun) − 1, dengan tarikan tidak diinvestasikan lagi. Drawdown: tarikan menurunkan peak sebesar jumlah yang sama, jadi tarikan tidak dihitung sebagai DD.
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="controls">
+      <div class="ctl"><label>Split</label><div class="seg" id="cSplit"><button class="on" data-v="IS">IS 2005–2015</button><button data-v="OOS">OOS 2016–2026</button></div></div>
+      <div class="ctl"><label>Metode</label><div class="seg" id="cMeth"><button class="on" data-v="resample">Resample</button><button data-v="shuffle">Shuffle</button><button data-v="block">Block</button></div></div>
+      <div class="ctl"><label>Sizing</label><div class="seg" id="cSize"><button class="on" data-v="export">Seperti export</button><button data-v="fixed2">True 2%</button></div></div>
+    </div>
+    <h3 style="margin-top:14px">Perbandingan kebijakan</h3>
+    <div class="tablewrap" id="cCompare"></div>
+    <p class="note" id="cCompareNote"></p>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="controls">
+      <div class="ctl"><label>Kebijakan (tabel &amp; chart)</label><div class="seg" id="cPol"><button data-v="fixed">Fixed $</button><button class="on" data-v="withdraw50">Tarik 50% / compound 50%</button><button data-v="compound">100% compound</button></div></div>
+      <div class="ctl"><label>Sorot percentile: <b id="cPctLab">P50</b></label><input type="range" id="cPct" min="5" max="95" step="5" value="50"></div>
+    </div>
+    <div class="tablewrap" id="cTable" style="margin-top:10px"></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><h3>Equity akhir tahun (setelah tarikan)</h3><div class="chart" id="cEq"></div>
+      <div class="legend"><span><i style="background:var(--band1);height:8px"></i>P5–P95</span><span><i style="background:var(--band2);height:8px"></i>P25–P75</span><span><i style="background:var(--is)"></i>P50</span><span><i style="background:var(--accent)"></i>aktual (urutan asli)</span></div></div>
+    <div class="card"><h3>Tarikan per tahun ($)</h3><div class="chart" id="cWd"></div>
+      <div class="legend"><span><i style="background:var(--band2);height:8px"></i>P5 / P95</span><span><i style="background:var(--is)"></i>P50</span><span><i style="background:var(--accent)"></i>aktual</span></div>
+      <p class="note">Tahun terakhir tidak ada tarikan. Di path rugi tarikannya 0, jadi P5 sering $0.</p></div>
+  </div>
+</section>
+
+<!-- ======================= SIMULATOR ======================= -->
+<section class="pane" id="pane-sim">
+  <h2>Simulator live (di browser)</h2>
+  <p class="note">Simulasi ulang di browser memakai definisi metrik yang sama dengan skrip Python. RNG-nya berbeda (sfc32), jadi angkanya berbeda sedikit dari tabel kanonik (noise MC). Ubah sizing, biaya, horizon, atau tambahkan gap shock lalu tekan Jalankan.</p>
+  <div class="card">
+    <div class="controls">
+      <div class="ctl"><label>Data trade</label><select id="sSplit"><option value="IS">IS 2005–2015 (553)</option><option value="OOS">OOS 2016–2026 (544)</option><option value="ALL">Gabungan 2005–2026 (1.097)</option></select></div>
+      <div class="ctl"><label>Metode</label><select id="sMeth"><option value="resample">Resample (with replacement)</option><option value="shuffle">Shuffle (acak urutan)</option><option value="block">Block bootstrap</option></select></div>
+      <div class="ctl"><label>Iterasi</label><select id="sIters"><option>1000</option><option>5000</option><option selected>10000</option><option>20000</option></select></div>
+      <div class="ctl"><label>Horizon (trade)</label><select id="sHor"><option value="12">12 (≈3 bln)</option><option value="25">25 (≈6 bln)</option><option value="50">50 (≈1 thn)</option><option value="100">100 (≈2 thn)</option><option value="250">250 (≈5 thn)</option><option value="0" selected>Seluruh split</option></select></div>
+      <div class="ctl"><label>Block rata-rata (trade)</label><input type="number" id="sBlock" value="10" min="2" max="100"></div>
+      <div class="ctl"><label>Modal awal ($)</label><input type="number" id="sCap" value="100000" step="5000" min="1000"></div>
+      <div class="ctl"><label>Sizing</label><select id="sSize"><option value="export">Seperti export (cap ikut)</option><option value="true">True risk % (R-normalised)</option></select></div>
+      <div class="ctl"><label>Risk / trade: <b id="sRiskLab">2.00%</b></label><input type="range" id="sRisk" min="0.1" max="3" step="0.05" value="2"></div>
+      <div class="ctl"><label>Kebijakan profit</label><select id="sPol"><option value="fixed">Fixed $ (tanpa compound)</option><option value="withdraw">Tarik X% / compound sisanya</option><option value="compound">100% compound</option></select></div>
+      <div class="ctl"><label>Tarik: <b id="sWdLab">50%</b> net tahunan</label><input type="range" id="sWd" min="0" max="100" step="5" value="50"></div>
+      <div class="ctl"><label>Biaya tambahan: <b id="sHairLab">0.0 pip</b></label><input type="range" id="sHair" min="0" max="3" step="0.1" value="0"></div>
+      <div class="ctl"><label>Gap shock: <b id="sGapLab">0%</b> stop-loss</label><input type="range" id="sGap" min="0" max="10" step="0.5" value="0"></div>
+      <div class="ctl"><label>Gap multiplier</label><input type="number" id="sGapM" value="3" min="1" max="10" step="0.5"></div>
+      <div class="ctl"><label>Seed</label><input type="number" id="sSeed" value="20261114"></div>
+      <button class="btn primary" id="sRun">▶ Jalankan</button>
+    </div>
+    <div class="progress"><div id="sProg"></div></div>
+    <p class="note" id="sInfo"></p>
+  </div>
+  <div class="grid g4" style="margin-top:12px" id="sKpi"></div>
+  <div class="card" style="margin-top:12px">
+    <div class="controls">
+      <div class="ctl"><label>Ambang DD (% modal awal, incl. MAE)</label><input type="number" id="sDDth" value="10" step="0.5"></div>
+      <div class="ctl"><label>Target profit (% modal awal)</label><input type="number" id="sTgt" value="50" step="5"></div>
+      <div class="ctl"><label>Ambang max cons loss</label><input type="number" id="sCLth" value="10" step="1"></div>
+    </div>
+    <div class="grid g3" style="margin-top:10px" id="sProb"></div>
+  </div>
+  <h2>Equity fan</h2>
+  <div class="card"><div class="chart" id="sFan"></div>
+    <div class="legend"><span><i style="background:var(--band1);height:8px"></i>P5–P95</span><span><i style="background:var(--band2);height:8px"></i>P25–P75</span><span><i style="background:var(--is)"></i>P50</span><span><i style="background:var(--muted);opacity:.5"></i>contoh path</span><span><i style="background:var(--accent)"></i>aktual (urutan asli)</span></div>
+    <p class="note">Band = percentile per titik trade (bukan satu path). Hover untuk nilai.</p></div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><div class="controls" style="margin-bottom:8px"><div class="ctl"><label>Histogram metrik</label><select id="sHistMet"></select></div>
+      <div class="ctl"><label>Penanda percentile: <b id="sHistPctLab">P50</b></label><input type="range" id="sHistPct" min="5" max="95" step="5" value="50"></div></div>
+      <div class="chart" id="sHist"></div></div>
+    <div class="card"><h3>Tabel percentile (live)</h3><div class="tablewrap" id="sTable" style="max-height:470px;overflow:auto"></div></div>
+  </div>
+</section>
+
+<!-- ======================= CROSS-CHECK ======================= -->
+<section class="pane" id="pane-xc">
+  <h2>Apakah OOS konsisten dengan IS?</h2>
+  <p class="note">Hasil aktual satu split ditempatkan di distribusi bootstrap split lainnya (jumlah trade disamakan). Rank di zona merah (&lt;5 atau &gt;95) berarti tidak konsisten.</p>
+  <div class="card"><div class="controls" style="margin-bottom:8px"><div class="seg" id="xcSeg"><button class="on" data-v="IS_bootstrap_vs_OOS_actual">OOS aktual di bootstrap IS</button><button data-v="OOS_bootstrap_vs_IS_actual">IS aktual di bootstrap OOS</button></div></div>
+    <div class="tablewrap" id="xcTable"></div></div>
+  <h2>Stress biaya (potongan pip per trade)</h2>
+  <div class="grid g2">
+    <div class="card"><div class="chart" id="costChart"></div>
+      <div class="legend"><span><i style="background:var(--is)"></i>IS P50 (band P5–P95)</span><span><i style="background:var(--oos)"></i>OOS P50 (band P5–P95)</span></div></div>
+    <div class="card"><div class="tablewrap" id="costTable"></div>
+      <p class="note" id="costNote"></p></div>
+  </div>
+  <h2>Komposisi trade</h2>
+  <div class="tablewrap" id="compTable"></div>
+</section>
+
+<!-- ======================= ASUMSI ======================= -->
+<section class="pane" id="pane-lim">
+  <h2>Asumsi &amp; keterbatasan</h2>
+  <div class="card"><ul id="limList" style="margin:0;padding-left:18px"></ul></div>
+  <h2>Parse checks</h2>
+  <div class="tablewrap" id="parseTable"></div>
+</section>
+
+<footer>Dibuat oleh <code>build_interactive_report.py</code> dari <code>results.json</code> (ANUBIS, seed 20261114) + <code>mc_core.js</code>. Mandiri, tanpa CDN, bisa dibuka offline. Bukan saran keuangan; ini riset.</footer>
+</div>
+
+<script>
+window.onerror = function(msg, src, line, col){ const e=document.getElementById('jserr'); e.style.display='block'; e.textContent='JS error: '+msg+' @'+line+':'+col; };
+/*__ANUBIS_DATA_D__*/
+// mc_core.js — browser/node Monte Carlo core for the gotobi interactive report.
+// Metric definitions mirror mc_gotobi_oanda.py (path_metrics) and mc_compound.py (run_paths); only
+// the RNG differs (sfc32 here vs numpy PCG64 there), so live results agree with the canonical
+// tables up to MC noise. Verified in node: the original-order path reproduces Python exactly.
+"use strict";
+
+function makeRng(seed) {
+  let a = (seed >>> 0) ^ 0xDEADBEEF, b = 0x9E3779B9, c = 0x243F6A88, d = 0xB7E15162;
+  function sfc() {
+    a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+    let t = (a + b) | 0;
+    a = b ^ (b >>> 9);
+    b = (c + (c << 3)) | 0;
+    c = (c << 21) | (c >>> 11);
+    d = (d + 1) | 0;
+    t = (t + d) | 0;
+    c = (c + t) | 0;
+    return (t >>> 0) / 4294967296;
+  }
+  for (let i = 0; i < 24; i++) sfc();
+  return sfc;
+}
+
+const METRIC_KEYS = ["profit_factor", "sharpe", "sortino", "max_cons_losses", "max_cons_wins",
+  "net_profit", "net_profit_pct", "max_dd_usd", "max_dd_pct", "max_dd_mae_usd", "max_dd_mae_pct",
+  "max_dd_init_pct", "win_rate", "avg_cons_wins", "avg_cons_losses",
+  "final_equity", "total_withdrawn", "cagr_equity", "cagr_wealth", "worst_year_pct", "losing_years"];
+
+// p: {pnl[], mae[], qty[], px_in[], px_out[] (or stop_usd[]), is_sl[], month_idx[], year_idx[], M}
+// o: {method, iters, horizon, blockMean, haircut, cap, riskPct, sizing: 'export'|'true',
+//     policy: 'fixed'|'withdraw'|'compound', withdrawPct (0..1), gapProb, gapMult, seed, bandPaths, samplePaths}
+//   export sizing: per-trade $ = exported P&L / $100k * (riskPct / 2) * E_ref  (TradingView sizing, cap effect kept)
+//   true sizing  : per-trade $ = R * riskPct/100 * E_ref, R = P&L / nominal 10-pip stop $ (no lot cap)
+//   E_ref = cap (fixed) or equity at the start of the calendar year (withdraw / compound)
+// Legacy: o.scale (export multiple at the cap) is honoured if riskPct is absent.
+function simulate(p, o, onProgress) {
+  const N = p.pnl.length;
+  const H = Math.min(o.horizon || N, N);
+  const S = o.iters;
+  const method = o.method;
+  if (method === "shuffle" && H !== N) throw new Error("shuffle needs horizon = N");
+  const cap = o.cap;
+  const riskPct = o.riskPct !== undefined ? o.riskPct : (o.scale !== undefined ? o.scale * 2000 / cap * 100 : 2);
+  const sizing = o.sizing || "export";
+  const policy = o.policy || "fixed";
+  const wp = policy === "withdraw" ? (o.withdrawPct !== undefined ? o.withdrawPct : 0.5) : 0;
+  const compounding = policy !== "fixed";
+  const unit = new Float64Array(N), maeU = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const net = p.pnl[i] - p.qty[i] * (o.haircut || 0) * 0.01 / p.px_out[i];
+    const stop = p.stop_usd ? p.stop_usd[i] : p.qty[i] * 0.10 / p.px_in[i];   // nominal 10-pip stop $ at the entry price
+    const f = sizing === "true" ? (riskPct / 100) / stop : (riskPct / 2) / 100000;
+    unit[i] = net * f;
+    maeU[i] = Math.min(p.mae[i] * f, unit[i] < 0 ? unit[i] : 0);
+  }
+  let m0, M;
+  if (H === N) { m0 = 0; M = p.M; } else { m0 = p.month_idx[0]; M = p.month_idx[H - 1] - m0 + 1; }
+  const mi = new Int32Array(H), yi = new Int32Array(H);
+  for (let j = 0; j < H; j++) { mi[j] = p.month_idx[j] - m0; yi[j] = p.year_idx ? p.year_idx[j] : 0; }
+  const years = M / 12;
+
+  const out = {};
+  for (const key of METRIC_KEYS) out[key] = new Float64Array(S);
+  const nBand = Math.min(S, o.bandPaths || 2000);
+  const eqStore = new Float32Array(nBand * H);
+  const samples = [];
+  const nSample = Math.min(S, o.samplePaths || 25);
+  const rng = makeRng(o.seed);
+  const idx = new Int32Array(H);
+  const perm = new Int32Array(N);
+  const monthly = new Float64Array(M);
+  const pBlock = 1 / (o.blockMean || 10);
+  const gapP = o.gapProb || 0, gapM = o.gapMult || 1;
+
+  for (let s = 0; s < S; s++) {
+    if (method === "resample") {
+      for (let j = 0; j < H; j++) idx[j] = Math.floor(rng() * N);
+    } else if (method === "shuffle") {
+      for (let i = 0; i < N; i++) perm[i] = i;
+      for (let i = N - 1; i > 0; i--) { const r = Math.floor(rng() * (i + 1)); const t = perm[i]; perm[i] = perm[r]; perm[r] = t; }
+      for (let j = 0; j < H; j++) idx[j] = perm[j];
+    } else if (method === "block") {
+      idx[0] = Math.floor(rng() * N);
+      for (let j = 1; j < H; j++) idx[j] = rng() < pBlock ? Math.floor(rng() * N) : (idx[j - 1] + 1) % N;
+    } else if (method === "original") {
+      for (let j = 0; j < H; j++) idx[j] = j;
+    } else throw new Error("method " + method);
+
+    monthly.fill(0);
+    let net = 0, gp = 0, gl = 0, wins = 0;
+    let eq = cap, peak = cap, eRef = cap, yStart = cap, withdrawn = 0, worst = Infinity, losing = 0;
+    let mdd = 0, mddp = 0, mddm = 0, mddmp = 0;
+    let cw = 0, cl = 0, mw = 0, ml = 0, nws = 0, nls = 0, prevWin = null;
+    const keepEq = s < nBand, keepSample = s < nSample;
+    const sample = keepSample ? new Float32Array(H) : null;
+    for (let j = 0; j < H; j++) {
+      if (j > 0 && yi[j] !== yi[j - 1]) {            // calendar year end before this trade
+        const ny = eq - yStart;
+        if (ny / yStart < worst) worst = ny / yStart;
+        if (ny < 0) losing++;
+        if (wp > 0 && ny > 0) { const w = wp * ny; eq -= w; peak -= w; withdrawn += w; }
+        yStart = eq;
+        if (compounding) eRef = eq;
+      }
+      const t = idx[j];
+      let u = unit[t], ua = maeU[t];
+      if (gapP > 0 && p.is_sl[t] && u < 0 && rng() < gapP) { u *= gapM; ua = Math.min(ua * gapM, u); }
+      const pl = u * eRef, a = ua * eRef;
+      const win = pl > 0;
+      net += pl;
+      if (win) { gp += pl; wins++; } else gl -= pl;
+      monthly[mi[j]] += u;                             // monthly return on the sizing base
+      const peakPrev = peak, eqPrev = eq;
+      eq += pl;
+      if (eq > peak) peak = eq;
+      const dd = peak - eq, ddp = dd / peak;
+      const trough = eqPrev + a;
+      const ddm = Math.max(peakPrev - trough, dd);
+      const ddmp = Math.max((peakPrev - trough) / peakPrev, ddp);
+      if (dd > mdd) mdd = dd;
+      if (ddp > mddp) mddp = ddp;
+      if (ddm > mddm) mddm = ddm;
+      if (ddmp > mddmp) mddmp = ddmp;
+      if (win) { cw++; cl = 0; if (cw > mw) mw = cw; } else { cl++; cw = 0; if (cl > ml) ml = cl; }
+      if (prevWin === null) { if (win) nws++; else nls++; }
+      else { if (win && !prevWin) nws++; if (!win && prevWin) nls++; }
+      prevWin = win;
+      if (keepEq) eqStore[s * H + j] = eq;
+      if (keepSample) sample[j] = eq;
+    }
+    { const ny = eq - yStart; if (ny / yStart < worst) worst = ny / yStart; if (ny < 0) losing++; }  // final (partial) year: no withdrawal
+    if (keepSample) samples.push(sample);
+    let mu = 0;
+    for (let q = 0; q < M; q++) mu += monthly[q];
+    mu /= M;
+    let v = 0, dn = 0;
+    for (let q = 0; q < M; q++) { const r = monthly[q]; v += (r - mu) * (r - mu); const mn = Math.min(r, 0); dn += mn * mn; }
+    const sd = Math.sqrt(v / (M - 1)), dsd = Math.sqrt(dn / M);
+    const wealth = eq + withdrawn;
+    out.net_profit[s] = net;
+    out.net_profit_pct[s] = net / cap * 100;
+    out.profit_factor[s] = gl > 0 ? gp / gl : Infinity;
+    out.win_rate[s] = wins / H * 100;
+    out.sharpe[s] = mu / sd * Math.sqrt(12);
+    out.sortino[s] = mu / dsd * Math.sqrt(12);
+    out.max_dd_usd[s] = mdd;
+    out.max_dd_pct[s] = mddp * 100;
+    out.max_dd_mae_usd[s] = mddm;
+    out.max_dd_mae_pct[s] = mddmp * 100;
+    out.max_dd_init_pct[s] = mddm / cap * 100;
+    out.max_cons_wins[s] = mw;
+    out.max_cons_losses[s] = ml;
+    out.avg_cons_wins[s] = nws > 0 ? wins / nws : 0;
+    out.avg_cons_losses[s] = nls > 0 ? (H - wins) / nls : 0;
+    out.final_equity[s] = eq;
+    out.total_withdrawn[s] = withdrawn;
+    out.cagr_equity[s] = (Math.pow(Math.max(eq, 1e-9) / cap, 1 / years) - 1) * 100;
+    out.cagr_wealth[s] = (Math.pow(Math.max(wealth, 1e-9) / cap, 1 / years) - 1) * 100;
+    out.worst_year_pct[s] = worst * 100;
+    out.losing_years[s] = losing;
+    if (onProgress && (s & 1023) === 1023) onProgress((s + 1) / S);
+  }
+  const bands = {5: new Float64Array(H), 25: new Float64Array(H), 50: new Float64Array(H), 75: new Float64Array(H), 95: new Float64Array(H)};
+  const col = new Float32Array(nBand);
+  for (let j = 0; j < H; j++) {
+    for (let s = 0; s < nBand; s++) col[s] = eqStore[s * H + j];
+    col.sort();
+    for (const q of [5, 25, 50, 75, 95]) bands[q][j] = col[Math.max(0, Math.ceil(q / 100 * nBand) - 1)];
+  }
+  return {metrics: out, bands, samples, H, M, S};
+}
+
+// numpy 'inverted_cdf' percentile on a sorted copy
+function sortedCopy(arr) { return Float64Array.from(arr).sort(); }
+function pctSorted(sorted, q) { const n = sorted.length; return sorted[Math.max(0, Math.ceil(q / 100 * n) - 1)]; }
+function mean(arr) { let s = 0, n = 0; for (const x of arr) if (isFinite(x)) { s += x; n++; } return n ? s / n : NaN; }
+
+if (typeof module !== "undefined") module.exports = {makeRng, simulate, sortedCopy, pctSorted, mean, METRIC_KEYS};
+
+</script>
+<script>
+"use strict";
+// ---------------------------------------------------------------- helpers
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmtMoney = v => (v < 0 ? "−$" : "$") + Math.round(Math.abs(v)).toLocaleString("en-US");
+const fmtK = v => (v < 0 ? "−$" : "$") + (Math.abs(v) >= 1e6 ? (Math.abs(v)/1e6).toFixed(2)+"M" : Math.abs(v) >= 1e3 ? (Math.abs(v)/1e3).toFixed(0)+"k" : Math.abs(v).toFixed(0));
+const f1 = v => isFinite(v) ? v.toFixed(1) : "∞";
+const f2 = v => isFinite(v) ? v.toFixed(2) : "∞";
+const f0 = v => isFinite(v) ? Math.round(v).toString() : "∞";
+const pctS = v => f1(v) + "%";
+const MET = [
+  {k:"profit_factor", t:"Profit factor", bad:"low", f:f2},
+  {k:"sharpe", t:"Sharpe", bad:"low", f:f2},
+  {k:"sortino", t:"Sortino", bad:"low", f:f2},
+  {k:"win_rate", t:"Win rate %", bad:"low", f:f1},
+  {k:"max_cons_losses", t:"Max cons loss", bad:"high", f:f0},
+  {k:"max_cons_wins", t:"Max cons win", bad:"low", f:f0},
+  {k:"net_profit", t:"Net profit $", bad:"low", f:fmtMoney},
+  {k:"net_profit_pct", t:"Net profit %", bad:"low", f:f1},
+  {k:"max_dd_usd", t:"Max DD $", bad:"high", f:fmtMoney},
+  {k:"max_dd_pct", t:"Max DD % peak", bad:"high", f:f1},
+  {k:"max_dd_mae_usd", t:"DD $ incl. MAE", bad:"high", f:fmtMoney},
+  {k:"max_dd_mae_pct", t:"DD % peak incl. MAE", bad:"high", f:f1},
+  {k:"max_dd_init_pct", t:"DD % modal awal incl. MAE", bad:"high", f:f1, live:true},
+  {k:"avg_cons_wins", t:"Avg cons win", bad:"low", f:f2},
+  {k:"avg_cons_losses", t:"Avg cons loss", bad:"high", f:f2},
+  {k:"cagr", t:"CAGR %", bad:"low", f:f1, derived:true},
+  {k:"cagr_equity", t:"CAGR equity %", bad:"low", f:f1, live:true},
+  {k:"cagr_wealth", t:"CAGR equity+tarikan %", bad:"low", f:f1, live:true},
+  {k:"final_equity", t:"Equity akhir $", bad:"low", f:fmtMoney, live:true},
+  {k:"total_withdrawn", t:"Total ditarik $", bad:"low", f:fmtMoney, live:true},
+  {k:"worst_year_pct", t:"Tahun terburuk %", bad:"low", f:f1, live:true},
+  {k:"losing_years", t:"Tahun rugi", bad:"high", f:f0, live:true},
+];
+const CMET = [
+  {k:"cagr_equity", t:"CAGR equity %", bad:"low", f:f1}, {k:"cagr_wealth", t:"CAGR equity+tarikan %", bad:"low", f:f1},
+  {k:"final_equity", t:"Equity akhir", bad:"low", f:fmtMoney}, {k:"total_withdrawn", t:"Total ditarik", bad:"low", f:fmtMoney},
+  {k:"avg_withdrawal_per_year", t:"Tarikan rata2/thn", bad:"low", f:fmtMoney}, {k:"net_profit", t:"Total P&L", bad:"low", f:fmtMoney},
+  {k:"max_dd_pct", t:"Max DD % (closed)", bad:"high", f:f1}, {k:"max_dd_mae_pct", t:"Max DD % (MAE)", bad:"high", f:f1},
+  {k:"max_dd_usd", t:"Max DD $", bad:"high", f:fmtMoney}, {k:"worst_year_pct", t:"Tahun terburuk %", bad:"low", f:f1},
+  {k:"losing_years", t:"Tahun rugi", bad:"high", f:f0}];
+const CPOL = {fixed: "Fixed $ (tanpa compound)", withdraw50: "Tarik 50% / compound 50%", compound: "100% compound"};
+const cagrOf = (k, net) => (Math.pow((100000 + net) / 100000, 12 / C.splits[k].months_in_span) - 1) * 100;
+const METK = Object.fromEntries(MET.map(m => [m.k, m]));
+const C = D.canon, T = D.trades, W = D.wr, CP = D.comp;
+const SPL = {IS: "IS 2005–2015", OOS: "OOS 2016–2026"};
+const PCTS = Array.from({length:19}, (_, i) => 5 + 5*i);
+
+const tip = $("#tip");
+function showTip(html, ev){ tip.innerHTML = html; tip.style.opacity = 1; const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
+function hideTip(){ tip.style.opacity = 0; }
+
+function seg(id, cb){ const el = $(id); el.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return;
+  el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cb(b.dataset.v); }); return () => el.querySelector("button.on").dataset.v; }
+
+function niceTicks(lo, hi, n){ if (!(hi > lo)) { hi = lo + 1; } const span = hi - lo, step0 = span / Math.max(1, n);
+  const mag = Math.pow(10, Math.floor(Math.log10(step0))); const r = step0 / mag;
+  const step = (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag; const t = []; for (let v = Math.ceil(lo/step)*step; v <= hi + 1e-9; v += step) t.push(+v.toFixed(10)); return t; }
+
+// generic x-index line chart with bands, hover crosshair
+function lineChart(el, o){
+  const Wd = o.width || 1000, Hd = o.height || 320, m = {l:70, r:16, t:12, b:30};
+  const n = o.n; let lo = Infinity, hi = -Infinity;
+  const all = [...(o.series||[]).map(s => s.values), ...(o.bands||[]).flatMap(b => [b.lo, b.hi]), ...(o.extra||[]).map(s => s.values)];
+  for (const arr of all) for (const v of arr) if (isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  (o.hlines||[]).forEach(h => { lo = Math.min(lo, h.y); hi = Math.max(hi, h.y); });
+  if (o.yMin !== undefined) lo = o.yMin; if (o.yMax !== undefined) hi = o.yMax;
+  const pad = (hi - lo) * .04; lo -= pad; hi += pad;
+  const X = i => m.l + (n <= 1 ? 0 : i / (n - 1)) * (Wd - m.l - m.r), Y = v => m.t + (1 - (v - lo) / (hi - lo)) * (Hd - m.t - m.b);
+  const path = arr => { let d = "", pen = false; arr.forEach((v, i) => { if (!isFinite(v)) { pen = false; return; } d += (pen ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1); pen = true; }); return d; };
+  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" preserveAspectRatio="none" style="aspect-ratio:${Wd}/${Hd}"><g class="axis">`;
+  for (const t of niceTicks(lo, hi, 6)) s += `<line class="gridline" x1="${m.l}" x2="${Wd-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${m.l-8}" y="${Y(t)+4}" text-anchor="end">${(o.yFmt||f2)(t)}</text>`;
+  const xt = o.xTicks || []; for (const [i, lab] of xt) s += `<text x="${X(i)}" y="${Hd-8}" text-anchor="middle">${lab}</text>`;
+  s += `</g>`;
+  for (const b of (o.bands||[])) { let d = ""; b.hi.forEach((v, i) => d += (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1)); for (let i = n - 1; i >= 0; i--) d += "L" + X(i).toFixed(1) + "," + Y(b.lo[i]).toFixed(1); s += `<path d="${d}Z" fill="${b.color}" stroke="none"/>`; }
+  for (const e of (o.extra||[])) s += `<path d="${path(e.values)}" fill="none" stroke="${e.color}" stroke-width="${e.w||1}" opacity="${e.op||.35}"/>`;
+  for (const h of (o.hlines||[])) s += `<line x1="${h.x0!==undefined?X(h.x0):m.l}" x2="${h.x1!==undefined?X(h.x1):Wd-m.r}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.color}" stroke-dasharray="${h.dash||'5 4'}" stroke-width="1.3"/>` + (h.label ? `<text x="${(h.x1!==undefined?X(h.x1):Wd-m.r)-4}" y="${Y(h.y)-5}" text-anchor="end" font-size="11" fill="${h.color}">${h.label}</text>` : "");
+  for (const v of (o.vlines||[])) s += `<line x1="${X(v.i)}" x2="${X(v.i)}" y1="${m.t}" y2="${Hd-m.b}" stroke="${v.color}" stroke-dasharray="3 3"/>` + (v.label ? `<text x="${X(v.i)+4}" y="${m.t+11}" font-size="11" fill="${v.color}">${v.label}</text>` : "");
+  for (const se of (o.series||[])) s += `<path d="${path(se.values)}" fill="none" stroke="${se.color}" stroke-width="${se.w||2}" ${se.dash ? `stroke-dasharray="${se.dash}"` : ""}/>`;
+  s += `<line id="xh" x1="0" x2="0" y1="${m.t}" y2="${Hd-m.b}" stroke="var(--muted)" stroke-width="1" opacity="0"/><rect x="${m.l}" y="${m.t}" width="${Wd-m.l-m.r}" height="${Hd-m.t-m.b}" fill="transparent"/></svg>`;
+  el.innerHTML = s;
+  const svg = el.querySelector("svg"), xh = svg.querySelector("#xh");
+  svg.addEventListener("mousemove", ev => { const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * Wd;
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - m.l) / (Wd - m.l - m.r) * (n - 1)))); xh.setAttribute("x1", X(i)); xh.setAttribute("x2", X(i)); xh.setAttribute("opacity", .6);
+    showTip(o.tip(i), ev); });
+  svg.addEventListener("mouseleave", () => { hideTip(); xh.setAttribute("opacity", 0); });
+}
+
+function barChart(el, o){
+  const Wd = 1000, Hd = o.height || 300, m = {l:70, r:16, t:12, b:30}; const n = o.labels.length, g = o.groups.length;
+  let lo = 0, hi = 0; o.groups.forEach(gr => gr.values.forEach(v => { if (v !== null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }));
+  (o.hlines||[]).forEach(h => { lo = Math.min(lo, h.y); hi = Math.max(hi, h.y); });
+  if (o.yMin !== undefined) lo = o.yMin; const pad = (hi - lo) * .05; hi += pad; if (lo < 0) lo -= pad;
+  const bw = (Wd - m.l - m.r) / n, Y = v => m.t + (1 - (v - lo) / (hi - lo)) * (Hd - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" style="aspect-ratio:${Wd}/${Hd}"><g class="axis">`;
+  for (const t of niceTicks(lo, hi, 6)) s += `<line class="gridline" x1="${m.l}" x2="${Wd-m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${m.l-8}" y="${Y(t)+4}" text-anchor="end">${(o.yFmt||f2)(t)}</text>`;
+  o.labels.forEach((lab, i) => { if (n <= 24 || i % 2 === 0) s += `<text x="${m.l + bw*(i+.5)}" y="${Hd-8}" text-anchor="middle">${lab}</text>`; });
+  s += `</g>`;
+  o.labels.forEach((lab, i) => { o.groups.forEach((gr, j) => { const v = gr.values[i]; if (v === null || v === undefined) return;
+    const w = bw * .78 / g, x = m.l + bw*i + bw*.11 + w*j, y0 = Y(Math.max(0, lo)), y1 = Y(v);
+    s += `<rect class="bar" data-i="${i}" x="${x}" y="${Math.min(y0,y1)}" width="${w}" height="${Math.max(1, Math.abs(y1-y0))}" rx="2" fill="${typeof gr.color === 'function' ? gr.color(v, i) : gr.color}"/>`; }); });
+  for (const h of (o.hlines||[])) s += `<line x1="${m.l}" x2="${Wd-m.r}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.color}" stroke-dasharray="5 4"/>` + (h.label ? `<text x="${Wd-m.r-4}" y="${Y(h.y)-5}" text-anchor="end" font-size="11" fill="${h.color}">${h.label}</text>` : "");
+  s += `</svg>`; el.innerHTML = s;
+  el.querySelectorAll(".bar").forEach(r => { r.addEventListener("mousemove", ev => { r.setAttribute("opacity", .75); showTip(o.tip(+r.dataset.i), ev); }); r.addEventListener("mouseleave", () => { r.removeAttribute("opacity"); hideTip(); }); });
+}
+
+function histChart(el, o){
+  // o.edges (len n+1), o.counts (len n), o.vlines [{x,color,label}]
+  const Wd = o.width || 560, Hd = o.height || 330, m = {l:46, r:12, t:34, b:30}; const n = o.counts.length;
+  const x0 = o.edges[0], x1 = o.edges[n]; const cmax = Math.max(...o.counts) || 1; const tot = o.counts.reduce((a, b) => a + b, 0) || 1;
+  const X = v => m.l + (v - x0) / (x1 - x0) * (Wd - m.l - m.r), Y = c => m.t + (1 - c / cmax) * (Hd - m.t - m.b);
+  let s = `<svg viewBox="0 0 ${Wd} ${Hd}" style="aspect-ratio:${Wd}/${Hd}"><g class="axis">`;
+  for (const t of niceTicks(x0, x1, 6)) if (t >= x0 && t <= x1) s += `<text x="${X(t)}" y="${Hd-10}" text-anchor="middle">${(o.xFmt||f1)(t)}</text>`;
+  for (const t of niceTicks(0, cmax / tot * 100, 4)) { const c = t / 100 * tot; if (c <= cmax) s += `<line class="gridline" x1="${m.l}" x2="${Wd-m.r}" y1="${Y(c)}" y2="${Y(c)}"/><text x="${m.l-6}" y="${Y(c)+4}" text-anchor="end">${t.toFixed(t < 1 ? 1 : 0)}%</text>`; }
+  s += `</g>`;
+  o.counts.forEach((c, i) => { const xa = X(o.edges[i]), xb = X(o.edges[i+1]); s += `<rect class="hb" data-i="${i}" x="${xa+.5}" y="${Y(c)}" width="${Math.max(.5, xb-xa-1)}" height="${Hd-m.b-Y(c)}" fill="${o.color||'var(--is)'}" opacity=".75"/>`; });
+  (o.vlines||[]).forEach((v, j) => { if (!isFinite(v.x)) return; const xx = Math.max(m.l, Math.min(Wd - m.r, X(v.x))); s += `<line x1="${xx}" x2="${xx}" y1="${m.t-6}" y2="${Hd-m.b}" stroke="${v.color}" stroke-width="2" ${v.dash ? `stroke-dasharray="${v.dash}"` : ""}/><text x="${xx+4}" y="${m.t-20+ (j%3)*12}" font-size="11" fill="${v.color}">${v.label||""}</text>`; });
+  s += `</svg>`; el.innerHTML = s;
+  let cum = []; o.counts.reduce((a, c, i) => (cum[i] = a + c, a + c), 0);
+  el.querySelectorAll(".hb").forEach(r => { const i = +r.dataset.i; r.addEventListener("mousemove", ev => { r.setAttribute("opacity", 1);
+    showTip(`${(o.xFmt||f1)(o.edges[i])} – ${(o.xFmt||f1)(o.edges[i+1])}<br>${(o.counts[i]/tot*100).toFixed(2)}% path · kumulatif ${(cum[i]/tot*100).toFixed(1)}%`, ev); });
+    r.addEventListener("mouseleave", () => { r.setAttribute("opacity", .75); hideTip(); }); });
+}
+
+function table(el, head, rows, opts = {}){
+  let s = "<table><thead><tr>" + head.map(h => `<th>${h}</th>`).join("") + "</tr></thead><tbody>";
+  rows.forEach((r, i) => { const cls = opts.rowClass ? opts.rowClass(i) : ""; s += `<tr class="${cls}">` + r.map(c => `<td>${c}</td>`).join("") + "</tr>"; });
+  el.innerHTML = s + "</tbody></table>";
+}
+
+// ---------------------------------------------------------------- tabs, theme
+function setTab(t){ $$(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === t)); $$(".pane").forEach(p => p.classList.toggle("active", p.id === "pane-" + t)); renderTab(t); }
+$("#tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) { setTab(b.dataset.tab); history.replaceState(null, "", "#tab=" + b.dataset.tab); } });
+$("#themeBtn").onclick = () => { document.documentElement.classList.toggle("dark"); renderTab(document.querySelector(".tab.active").dataset.tab); };
+const rendered = {};
+function renderTab(t){ ({sum: renderSum, wr: renderWR, tbl: renderTable, cagr: renderCagr, sim: () => { if (!LIVE) runSim(); else drawSim(); }, xc: renderXC, lim: renderLim})[t](); }
+
+// ---------------------------------------------------------------- RINGKASAN
+function q(split, meth, key, p){ const row = C.splits[split].mc[meth].percentiles.find(r => r.pct === p); return row ? row[key] : NaN; }
+function renderSum(){
+  const xc = C.cross_check.IS_bootstrap_vs_OOS_actual.rows; const rk = k => (xc.find(r => r.metric === k) || {}).rank_pct;
+  const wi = W.IS, wo = W.OOS, ci = C.cost_stress.IS, co = C.cost_stress.OOS;
+  const V = [
+    `<b>Sequencing risk sedang, dan sama di kedua dekade.</b> Resample IS: net P5/P50/P95 = ${fmtK(q("IS","resample","net_profit",5))} / ${fmtK(q("IS","resample","net_profit",50))} / ${fmtK(q("IS","resample","net_profit",95))}. OOS: ${fmtK(q("OOS","resample","net_profit",5))} / ${fmtK(q("OOS","resample","net_profit",50))} / ${fmtK(q("OOS","resample","net_profit",95))}. Tidak ada path yang berakhir rugi.`,
+    `<b>Ekspektasi win rate:</b> IS ${pctS(wi.actual)} (P5–P95 ${f1(wi.boot_pcts["5"])}–${f1(wi.boot_pcts["95"])}%) vs breakeven ${pctS(wi.breakeven_wr)}; OOS ${pctS(wo.actual)} (P5–P95 ${f1(wo.boot_pcts["5"])}–${f1(wo.boot_pcts["95"])}%) vs breakeven ${pctS(wo.breakeven_wr)}. Win rate OOS turun, tapi winner-nya lebih besar (payoff ${f2(wo.payoff)} vs ${f2(wi.payoff)}), jadi margin di atas breakeven tetap sekitar ${f1(wo.actual - wo.breakeven_wr)} poin.`,
+    `<b>Secara total OOS konsisten dengan IS, tapi komposisinya tidak.</b> Net OOS ada di percentile ke-${f0(rk("net_profit"))} bootstrap IS, PF di ke-${f0(rk("profit_factor"))}. Win rate OOS ada di percentile ke-${f1(rk("win_rate"))}, di luar band.`,
+    `<b>Risiko terbesar adalah fill model, bukan urutan trade.</b> Edge ≈ ${f1(C.splits.IS.descriptive.mean_pips)} pip/trade (IS) dan ${f1(C.splits.OOS.descriptive.mean_pips)} (OOS). Tambahan biaya ${f1(ci.haircut_for_t_below_2_pips)} pip sudah menjatuhkan t di bawah 2, dan di 2 pip net P5 jadi negatif. TradingView tidak menghitung spread ask saat buy-back maupun stop.`,
+    `<b>Paparan data:</b> 2005–2014 belum pernah dibaca riset proyek (bukti terbaik). 2016–2026 hanya quasi-OOS, karena sudah dibaca riset sebelumnya dan SOLOMON tuning di 2020–21.`,
+    `<b>CAGR (resample P50):</b> fixed $ IS ${pctS(CP.splits.IS.mc.resample["export|fixed"].percentiles.find(r => r.pct === 50).cagr_equity)} / OOS ${pctS(CP.splits.OOS.mc.resample["export|fixed"].percentiles.find(r => r.pct === 50).cagr_equity)}. Tarik 50% / compound 50%: CAGR equity IS ${pctS(CP.splits.IS.mc.resample["export|withdraw50"].percentiles.find(r => r.pct === 50).cagr_equity)} / OOS ${pctS(CP.splits.OOS.mc.resample["export|withdraw50"].percentiles.find(r => r.pct === 50).cagr_equity)}, ditambah tarikan median ${fmtK(CP.splits.IS.mc.resample["export|withdraw50"].percentiles.find(r => r.pct === 50).total_withdrawn)} / ${fmtK(CP.splits.OOS.mc.resample["export|withdraw50"].percentiles.find(r => r.pct === 50).total_withdrawn)}. Detail di tab CAGR.`,
+    `<b>Sizing di export</b> (2% dari $100k, ±$1.800+/trade) <b>tidak cocok</b> untuk akun prop $50k (daily 3%). Coba risk lain di tab Simulator.`,
+  ];
+  $("#verdictList").innerHTML = V.map(v => `<li>${v}</li>`).join("");
+  $("#sumCards").innerHTML = ["IS", "OOS"].map(k => { const a = C.splits[k].actual, sm = C.splits[k].standard_metrics, col = k === "IS" ? "var(--is)" : "var(--oos)";
+    const band = (key, f) => `${f(q(k,"resample",key,5))} / ${f(q(k,"resample",key,50))} / ${f(q(k,"resample",key,95))}`;
+    const kp = (lab, val, small) => `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}</div><div class="small">${small}</div></div>`;
+    return `<div class="card"><div class="split-head"><span class="dot" style="background:${col}"></span><b>${C.splits[k].label}</b></div>
+      <div class="grid g3">
+        ${kp("Net profit", fmtK(a.net_profit), "P5/50/95 " + band("net_profit", fmtK))}
+        ${kp("Profit factor", f2(a.profit_factor), "P5/50/95 " + band("profit_factor", f2))}
+        ${kp("Win rate", pctS(a.win_rate), "P5/50/95 " + band("win_rate", f1) + " · BE " + f1(W[k].breakeven_wr))}
+        ${kp("Sharpe / Sortino", f2(a.sharpe) + " / " + f2(a.sortino), "Sharpe P5/50/95 " + band("sharpe", f2))}
+        ${kp("Max DD incl. MAE", fmtK(a.max_dd_mae_usd), "P5/50/95 " + band("max_dd_mae_usd", fmtK))}
+        ${kp("Max cons loss / win", f0(a.max_cons_losses) + " / " + f0(a.max_cons_wins), "loss P5/50/95 " + band("max_cons_losses", f0))}
+      </div>
+      <div class="note" style="margin-top:8px">Expectancy ${f2(sm.expectancy_R)}R (t ${f1(sm.t_stat)}) · ${f1(sm.trades_per_month)} trade/bln · max DD ${f1(sm.max_drawdown_R)}R</div></div>`; }).join("");
+  // actual equity
+  const dates = [...T.IS.date, ...T.OOS.date]; const pl = [...T.IS.pnl, ...T.OOS.pnl]; let c = 0; const eq = pl.map(v => c += v);
+  const nIS = T.IS.N; const isS = eq.map((v, i) => i < nIS ? v : NaN), ooS = eq.map((v, i) => i >= nIS - 1 ? v : NaN);
+  const xt = []; let lastY = ""; dates.forEach((d, i) => { const y = d.slice(0, 4); if (y !== lastY && (+y) % 2 === 1) { xt.push([i, y]); } lastY = y; });
+  lineChart($("#eqActual"), {n: eq.length, series: [{values: isS, color: css("--is")}, {values: ooS, color: css("--oos")}], yFmt: fmtK, xTicks: xt, height: 300,
+    vlines: [{i: nIS, color: css("--muted"), label: "IS | OOS"}],
+    tip: i => `<b>${dates[i]}</b> · trade #${i < nIS ? i + 1 : i - nIS + 1} (${i < nIS ? "IS" : "OOS"})<br>P&L ${fmtMoney(pl[i])}<br>Kumulatif ${fmtMoney(eq[i])}`});
+  renderYear(yearMode());
+}
+const yearMode = seg("#yearSeg", v => renderYear(v));
+function renderYear(mode){
+  const ys = [...C.splits.IS.per_year, ...C.splits.OOS.per_year];
+  const val = r => mode === "net" ? r.net_usd : mode === "wr" ? r.win_rate : r.mean_pips;
+  const fmt = mode === "net" ? fmtK : mode === "wr" ? (v => f0(v) + "%") : f1;
+  const hl = mode === "wr" ? [{y: 50, color: css("--muted"), label: "50%"}] : [];
+  barChart($("#yearChart"), {labels: ys.map(r => String(r.year).slice(2)), height: 280, yFmt: fmt, hlines: hl, yMin: mode === "wr" ? 30 : undefined,
+    groups: [{values: ys.map(val), color: (v, i) => v < 0 ? css("--bad") : (ys[i].year <= 2015 ? css("--is") : css("--oos"))}],
+    tip: i => { const r = ys[i]; return `<b>${r.year}</b> (${r.year <= 2015 ? "IS" : "OOS"})<br>${r.n} trade · win ${f1(r.win_rate)}%<br>Net ${fmtMoney(r.net_usd)} · ${f2(r.mean_pips)} pip/trade<br>Harga rata-rata ${f1(r.avg_price)}`; }});
+}
+
+// ---------------------------------------------------------------- WIN RATE
+const wrSplit = seg("#wrSplitSeg", () => renderWR()), wrCols = seg("#wrColSeg", () => renderWR());
+function renderWR(){
+  $("#wrCards").innerHTML = ["IS", "OOS"].map(k => { const w = W[k], col = k === "IS" ? "var(--is)" : "var(--oos)"; const mg = w.actual - w.breakeven_wr;
+    const kp = (lab, val, small) => `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}</div><div class="small">${small}</div></div>`;
+    const yr = w.by_horizon.find(h => h.horizon === 50);
+    return `<div class="card"><div class="split-head"><span class="dot" style="background:${col}"></span><b>${SPL[k]}</b> <span class="pill ${mg > 3 ? "good" : mg > 0 ? "warn" : "bad"}">margin ${mg >= 0 ? "+" : ""}${f1(mg)} poin di atas BE</span></div>
+      <div class="grid g3">
+        ${kp("Win rate aktual", pctS(w.actual), `${w.wins}/${w.n} · Wilson 95% ${f1(w.wilson[0])}–${f1(w.wilson[1])}%`)}
+        ${kp("Breakeven win rate", pctS(w.breakeven_wr), `avg win ${fmtMoney(w.avg_win)} / avg loss ${fmtMoney(w.avg_loss)} · payoff ${f2(w.payoff)}`)}
+        ${kp("Ekspektasi (bootstrap N)", `${f1(w.boot_pcts["50"])}%`, `P5 ${f1(w.boot_pcts["5"])}% · P95 ${f1(w.boot_pcts["95"])}%`)}
+        ${kp("1 tahun (50 trade)", `${f1(yr.pcts["5"])}–${f1(yr.pcts["95"])}%`, `P5–P95 · P(< BE) ${f1(yr.p_below_breakeven*100)}%`)}
+        ${kp("Win rate +1 pip biaya", pctS(w.haircut[2].win_rate), `BE ${f1(w.haircut[2].breakeven_wr)}% · margin ${f1(w.haircut[2].margin_pts)}`)}
+        ${kp("Win rate +2 pip biaya", pctS(w.haircut[4].win_rate), `BE ${f1(w.haircut[4].breakeven_wr)}% · margin ${f1(w.haircut[4].margin_pts)}`)}
+      </div></div>`; }).join("");
+  const k = wrSplit(), w = W[k], all = wrCols() === "all";
+  const cols = all ? PCTS : [5, 10, 25, 50, 75, 90, 95];
+  table($("#wrHorizonTable"), ["Horizon", ...cols.map(p => "P" + p), "Mean", "P(< BE " + f1(w.breakeven_wr) + "%)", "P(< 50%)"],
+    w.by_horizon.map(h => [h.label, ...cols.map(p => f1(h.pcts[String(p)]) + "%"), f1(h.mean) + "%",
+      `<span class="pill ${h.p_below_breakeven > .25 ? "bad" : h.p_below_breakeven > .05 ? "warn" : "good"}">${f1(h.p_below_breakeven*100)}%</span>`, f1(h.p_below_50*100) + "%"]));
+  const other = k === "IS" ? "OOS" : "IS";
+  histChart($("#wrHist"), {edges: w.hist.edges, counts: w.hist.counts, color: k === "IS" ? css("--is") : css("--oos"), xFmt: v => f0(v) + "%", height: 330,
+    vlines: [{x: w.actual, color: css("--ink"), label: "aktual " + f1(w.actual)}, {x: w.breakeven_wr, color: css("--bad"), label: "BE " + f1(w.breakeven_wr), dash: "5 3"},
+             {x: W[other].actual, color: css("--muted"), label: other + " " + f1(W[other].actual), dash: "2 3"}]});
+  table($("#wrHaircut"), ["Biaya +pip", "IS WR", "IS BE", "IS margin", "OOS WR", "OOS BE", "OOS margin"],
+    W.IS.haircut.map((h, i) => { const o = W.OOS.haircut[i]; const mg = v => `<span class="pill ${v > 3 ? "good" : v > 0 ? "warn" : "bad"}">${v >= 0 ? "+" : ""}${f1(v)}</span>`;
+      return [f1(h.haircut_pips), pctS(h.win_rate), pctS(h.breakeven_wr), mg(h.margin_pts), pctS(o.win_rate), pctS(o.breakeven_wr), mg(o.margin_pts)]; }));
+  const pts = W.rolling.points; const xt = []; let ly = ""; pts.forEach((p, i) => { const y = p.date.slice(0, 4); if (y !== ly && (+y) % 2 === 1) xt.push([i, y]); ly = y; });
+  const iFirstOOS = pts.findIndex(p => p.split === "OOS");
+  lineChart($("#wrRoll"), {n: pts.length, height: 300, yFmt: v => f0(v) + "%", xTicks: xt,
+    series: [{values: pts.map(p => p.split === "IS" ? p.wr : NaN), color: css("--is")}, {values: pts.map(p => p.split === "OOS" ? p.wr : NaN), color: css("--oos")}],
+    hlines: [{y: 50, color: css("--muted"), dash: "2 3"}, {y: W.IS.breakeven_wr, color: css("--bad"), x0: 0, x1: iFirstOOS - 1, label: "BE IS " + f1(W.IS.breakeven_wr)}, {y: W.OOS.breakeven_wr, color: css("--bad"), x0: iFirstOOS, x1: pts.length - 1, label: "BE OOS " + f1(W.OOS.breakeven_wr)}],
+    tip: i => `<b>${pts[i].date}</b> (${pts[i].split})<br>WR 50 trade terakhir: ${f1(pts[i].wr)}%<br>Net 50 trade terakhir: ${fmtMoney(pts[i].net)}`});
+}
+
+// ---------------------------------------------------------------- TABEL
+const tCols = new Set(["profit_factor", "sharpe", "sortino", "win_rate", "max_cons_losses", "max_cons_wins", "net_profit", "cagr", "max_dd_usd", "max_dd_pct", "max_dd_mae_usd"]);
+$("#tCols").innerHTML = MET.filter(m => !m.live).map(m => `<label><input type="checkbox" data-k="${m.k}" ${tCols.has(m.k) ? "checked" : ""}>${m.t}</label>`).join("");
+$("#tCols").addEventListener("change", e => { const k = e.target.dataset.k; e.target.checked ? tCols.add(k) : tCols.delete(k); renderTable(); });
+const tSplit = seg("#tSplit", () => renderTable()), tMeth = seg("#tMeth", () => renderTable());
+$("#tPct").addEventListener("input", () => renderTable());
+function renderTable(){
+  const k = tSplit(), meth = tMeth(), hp = +$("#tPct").value; $("#tPctLab").textContent = "P" + hp;
+  const rows = C.splits[k].mc[meth].percentiles.map(r => ({...r, cagr: typeof r.pct === "number" ? cagrOf(k, r.net_profit) : NaN}));
+  const mets = MET.filter(m => !m.live && tCols.has(m.k));
+  const inv = meth === "shuffle" ? new Set(["profit_factor", "net_profit", "net_profit_pct", "win_rate", "cagr"]) : new Set();
+  const head = ["Pct", ...mets.map(m => `${m.t}<span class="tail ${m.bad}">${m.bad === "low" ? "rendah = buruk" : "tinggi = buruk"}</span>`)];
+  let s = "<table><thead><tr>" + head.map(h => `<th>${h}</th>`).join("") + "</tr></thead><tbody>";
+  rows.forEach(r => { const isMean = r.pct === "mean" || typeof r.pct !== "number"; const cls = isMean ? "mean" : r.pct === hp ? "hl" : [5, 50, 95].includes(r.pct) ? "key" : "";
+    s += `<tr class="${cls}"><td>${isMean ? "mean" : "P" + r.pct}</td>` + mets.map(m => `<td class="${inv.has(m.k) ? "inv" : ""}">${isMean && m.k === "cagr" ? "—" : m.f(r[m.k])}</td>`).join("") + "</tr>"; });
+  if (!rows.some(r => typeof r.pct !== "number")) { s += `<tr class="mean"><td>median</td>` + mets.map(m => `<td>${m.f(C.splits[k].mc[meth].median[m.k])}</td>`).join("") + "</tr>"; }
+  const actR = {...C.splits[k].actual, cagr: cagrOf(k, C.splits[k].actual.net_profit)}, rankR = {...C.splits[k].mc[meth].actual_rank_pct, cagr: C.splits[k].mc[meth].actual_rank_pct.net_profit};
+  s += `<tr class="mean"><td>aktual</td>` + mets.map(m => `<td>${m.f(actR[m.k])}</td>`).join("") + "</tr>";
+  s += `<tr class="mean"><td>rank aktual</td>` + mets.map(m => `<td>${f0(rankR[m.k])}%</td>`).join("") + "</tr>";
+  $("#tTable").innerHTML = s + "</tbody></table>";
+  $("#tNote").innerHTML = (meth === "shuffle" ? "<b>Shuffle:</b> PF, net profit dan win rate (abu-abu) sama di semua baris karena trade-nya sama; hanya metrik path (DD, streak, Sharpe/Sortino) yang informatif. " : "")
+    + (meth === "block" ? "<b>Block bootstrap (pelengkap):</b> mempertahankan klaster menang/kalah, jadi streak dan DD sedikit lebih buruk dari resample iid. " : "")
+    + "DD % of peak terdistorsi oleh pertumbuhan equity (±3,8×), jadi DD $ lebih jujur. Percentile = nilai simulasi aktual (numpy inverted_cdf). CAGR di sini = sizing fixed $2.000 (tanpa compound), (equity akhir / $100k)^(12/" + C.splits[k].months_in_span + ") − 1. Untuk compounding dan tarikan, lihat tab CAGR.";
+  const pr = rows.find(r => r.pct === hp);
+  $("#tSpot").innerHTML = [["Net profit / CAGR", fmtMoney(pr.net_profit) + " · " + f1(pr.cagr) + "%"], ["Profit factor", f2(pr.profit_factor)], ["Win rate", pctS(pr.win_rate)], ["Sharpe / Sortino", f2(pr.sharpe) + " / " + f2(pr.sortino)],
+    ["Max DD $ (P" + hp + ")", fmtMoney(pr.max_dd_usd)], ["Max cons loss / win", f0(pr.max_cons_losses) + " / " + f0(pr.max_cons_wins)]]
+    .map(([l, v]) => `<div class="card kpi"><div class="lab">${SPL[k]} · ${meth} · P${hp}</div><div class="lab" style="color:var(--ink)">${l}</div><div class="val">${v}</div></div>`).join("");
+  $("#tCsv").onclick = () => { const mm = MET.filter(m => !m.live); const lines = ["pct," + mm.map(m => m.k).join(",")];
+    rows.forEach(r => lines.push(r.pct + "," + mm.map(m => r[m.k]).join(","))); const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([lines.join("\n")], {type: "text/csv"})); a.download = `gotobi_mc_${k}_${meth}.csv`; a.click(); };
+}
+
+// ---------------------------------------------------------------- CAGR & COMPOUNDING
+const cSplit = seg("#cSplit", () => renderCagr()), cMeth = seg("#cMeth", () => renderCagr()), cSize = seg("#cSize", () => renderCagr()), cPol = seg("#cPol", () => renderCagr());
+$("#cPct").addEventListener("input", () => renderCagr());
+function renderCagr(){
+  const k = cSplit(), meth = cMeth(), sz = cSize(), pol = cPol(), hp = +$("#cPct").value; $("#cPctLab").textContent = "P" + hp;
+  const S = CP.splits[k], yrs = S.months / 12;
+  const row = (combo, p) => S.mc[meth][combo].percentiles.find(r => r.pct === p);
+  // comparison across policies
+  const pols = ["fixed", "withdraw50", "compound"];
+  const head = ["Kebijakan", "CAGR equity P5", "P50", "P95", "CAGR eq+tarikan P5", "P50", "P95", "Total ditarik P50", "Tarikan/thn P50", "Equity akhir P50", "DD MAE P50", "DD MAE P95", "Thn terburuk P5", "P(DD MAE ≥ 30%)", "Aktual CAGR eq / eq+tarikan"];
+  table($("#cCompare"), head, pols.map(pl => { const c = `${sz}|${pl}`, m = S.mc[meth][c], a = S.actual[c];
+    const g = (p, key, f) => f(row(c, p)[key]);
+    return [`<b>${CPOL[pl]}</b>`, g(5, "cagr_equity", pctS), `<b>${g(50, "cagr_equity", pctS)}</b>`, g(95, "cagr_equity", pctS), g(5, "cagr_wealth", pctS), `<b>${g(50, "cagr_wealth", pctS)}</b>`, g(95, "cagr_wealth", pctS),
+      g(50, "total_withdrawn", fmtK), g(50, "avg_withdrawal_per_year", fmtK), g(50, "final_equity", fmtK), g(50, "max_dd_mae_pct", pctS), g(95, "max_dd_mae_pct", pctS), g(5, "worst_year_pct", pctS),
+      `<span class="pill ${m.p_dd_mae_ge_30 > .1 ? "bad" : m.p_dd_mae_ge_30 > .02 ? "warn" : "good"}">${f1(m.p_dd_mae_ge_30 * 100)}%</span>`, pctS(a.cagr_equity) + " / " + pctS(a.cagr_wealth)]; }),
+    {rowClass: i => pols[i] === pol ? "hl" : ""});
+  $("#cCompareNote").innerHTML = `${S.label} · ${meth} · sizing ${sz === "export" ? "seperti export" : "true 2%"} · ${CP.meta.iterations.toLocaleString()} path, seed ${CP.meta.seed} (common random numbers: ketiga kebijakan memakai urutan trade acak yang sama). Rentang ${f2(yrs)} tahun.`
+    + (meth === "shuffle" ? " <b>Shuffle:</b> pada fixed $ semua angka P&amp;L sama di setiap path, tapi pada compounding urutan trade mengubah hasil (sizing ikut equity)." : "");
+  // full percentile table for selected policy
+  const combo = `${sz}|${pol}`, rows = S.mc[meth][combo].percentiles, a = S.actual[combo];
+  let t = "<table><thead><tr><th>Pct</th>" + CMET.map(m => `<th>${m.t}<span class="tail ${m.bad}">${m.bad === "low" ? "rendah = buruk" : "tinggi = buruk"}</span></th>`).join("") + "</tr></thead><tbody>";
+  rows.forEach(r => { const mean = typeof r.pct !== "number"; const cls = mean ? "mean" : r.pct === hp ? "hl" : [5, 50, 95].includes(r.pct) ? "key" : "";
+    t += `<tr class="${cls}"><td>${mean ? "mean" : "P" + r.pct}</td>` + CMET.map(m => `<td>${m.f(r[m.k])}</td>`).join("") + "</tr>"; });
+  t += `<tr class="mean"><td>aktual</td>` + CMET.map(m => `<td>${m.f(a[m.k])}</td>`).join("") + "</tr>";
+  $("#cTable").innerHTML = t + "</tbody></table>";
+  // charts: year-end equity bands + yearly withdrawals
+  const b = S.mc[meth][combo].year_end_equity_bands, years = S.years, n = years.length;
+  const xt = years.map((y, i) => [i, String(y).slice(2)]);
+  lineChart($("#cEq"), {n, width: 600, height: 340, yFmt: fmtK, xTicks: xt,
+    bands: [{lo: b["5"], hi: b["95"], color: css("--band1")}, {lo: b["25"], hi: b["75"], color: css("--band2")}],
+    series: [{values: b["50"], color: css("--is"), w: 2.4}, {values: a.year_end_equity, color: css("--accent"), w: 1.8}],
+    hlines: [{y: 100000, color: css("--muted"), label: "$100k"}],
+    tip: i => `<b>Akhir ${years[i]}</b><br>P95 ${fmtMoney(b["95"][i])}<br>P75 ${fmtMoney(b["75"][i])}<br><b>P50 ${fmtMoney(b["50"][i])}</b><br>P25 ${fmtMoney(b["25"][i])}<br>P5 ${fmtMoney(b["5"][i])}<br>aktual ${fmtMoney(a.year_end_equity[i])}`});
+  const w = S.mc[meth][combo].year_withdrawal_bands;
+  if (pol !== "withdraw50") { $("#cWd").innerHTML = `<p class="note" style="padding:40px 10px;text-align:center">Kebijakan “${CPOL[pol]}” tidak menarik profit. Pilih “Tarik 50% / compound 50%”.</p>`; return; }
+  lineChart($("#cWd"), {n, width: 600, height: 340, yFmt: fmtK, xTicks: xt, yMin: 0,
+    bands: [{lo: w["5"], hi: w["95"], color: css("--band2")}],
+    series: [{values: w["50"], color: css("--is"), w: 2.4}, {values: a.year_withdrawal, color: css("--accent"), w: 1.8}],
+    tip: i => `<b>Tarikan akhir ${years[i]}</b><br>P95 ${fmtMoney(w["95"][i])}<br><b>P50 ${fmtMoney(w["50"][i])}</b><br>P5 ${fmtMoney(w["5"][i])}<br>aktual ${fmtMoney(a.year_withdrawal[i])}`});
+}
+
+// ---------------------------------------------------------------- SIMULATOR
+let LIVE = null;
+$("#sHistMet").innerHTML = MET.filter(m => !m.derived).map(m => `<option value="${m.k}" ${m.k === "net_profit" ? "selected" : ""}>${m.t}</option>`).join("");
+const lab = () => { $("#sRiskLab").textContent = (+$("#sRisk").value).toFixed(2) + "%"; $("#sHairLab").textContent = (+$("#sHair").value).toFixed(1) + " pip"; $("#sGapLab").textContent = (+$("#sGap").value).toFixed(1) + "%"; $("#sWdLab").textContent = $("#sWd").value + "%"; $("#sWd").disabled = $("#sPol").value !== "withdraw"; };
+["#sRisk", "#sHair", "#sGap", "#sWd"].forEach(id => $(id).addEventListener("input", lab)); $("#sPol").addEventListener("change", lab); lab();
+$("#sMeth").addEventListener("change", () => { if ($("#sMeth").value === "shuffle") $("#sHor").value = "0"; });
+$("#sHor").addEventListener("change", () => { if ($("#sHor").value !== "0" && $("#sMeth").value === "shuffle") $("#sMeth").value = "resample"; });
+$("#sRun").onclick = () => runSim();
+["#sDDth", "#sTgt", "#sCLth"].forEach(id => $(id).addEventListener("input", () => LIVE && drawProb()));
+$("#sHistMet").addEventListener("change", () => LIVE && drawHist()); $("#sHistPct").addEventListener("input", () => LIVE && drawHist());
+function poolFor(split){
+  if (split !== "ALL") return T[split];
+  const a = T.IS, b = T.OOS, off = a.M;
+  const yoff = b.years[0] - a.years[0];
+  return {N: a.N + b.N, M: a.M + b.M, pnl: [...a.pnl, ...b.pnl], mae: [...a.mae, ...b.mae], qty: [...a.qty, ...b.qty], px_out: [...a.px_out, ...b.px_out], px_in: [...a.px_in, ...b.px_in],
+    is_sl: [...a.is_sl, ...b.is_sl], month_idx: [...a.month_idx, ...b.month_idx.map(x => x + off)], year_idx: [...a.year_idx, ...b.year_idx.map(x => x + yoff)],
+    years: [...a.years, ...b.years], date: [...a.date, ...b.date], months: [...a.months, ...b.months]};
+}
+function runSim(){
+  const split = $("#sSplit").value, pool = poolFor(split), cap = +$("#sCap").value, risk = +$("#sRisk").value;
+  const o = {method: $("#sMeth").value, iters: +$("#sIters").value, horizon: +$("#sHor").value || pool.N, blockMean: +$("#sBlock").value,
+    haircut: +$("#sHair").value, cap, riskPct: risk, sizing: $("#sSize").value, policy: $("#sPol").value, withdrawPct: +$("#sWd").value / 100, gapProb: +$("#sGap").value / 100, gapMult: +$("#sGapM").value, seed: +$("#sSeed").value, bandPaths: 2000, samplePaths: 25};
+  if (o.method === "shuffle") o.horizon = pool.N;
+  $("#sRun").disabled = true; $("#sRun").textContent = "… menghitung"; $("#sProg").style.width = "5%";
+  setTimeout(() => { const t0 = performance.now();
+    const res = simulate(pool, o, f => { $("#sProg").style.width = (f * 100).toFixed(0) + "%"; });
+    const act = simulate(pool, {...o, method: "original", iters: 1, horizon: o.horizon, gapProb: 0, seed: 1});
+    const sorted = {}; for (const k of METRIC_KEYS) sorted[k] = sortedCopy(res.metrics[k]);
+    LIVE = {res, act, sorted, o, split, pool, ms: performance.now() - t0};
+    $("#sProg").style.width = "100%"; $("#sRun").disabled = false; $("#sRun").textContent = "▶ Jalankan"; drawSim(); }, 30);
+}
+function lp(k, p){ return pctSorted(LIVE.sorted[k], p); }
+function prob(k, fn){ const a = LIVE.res.metrics[k]; let c = 0; for (const v of a) if (fn(v)) c++; return c / a.length; }
+function drawSim(){
+  if (!LIVE) return; const {o, res, split} = LIVE;
+  const polTxt = o.policy === "fixed" ? "fixed $" : o.policy === "compound" ? "100% compound" : `tarik ${(o.withdrawPct*100).toFixed(0)}% / compound ${(100 - o.withdrawPct*100).toFixed(0)}%`;
+  $("#sInfo").innerHTML = `${o.iters.toLocaleString()} path × ${res.H} trade · ${o.method} · ${split === "ALL" ? "gabungan" : SPL[split]} · modal ${fmtMoney(o.cap)} · risk ${o.riskPct.toFixed(2)}% ${o.sizing === "true" ? "(true, R-normalised)" : "(seperti export, cap ikut)"} · ${polTxt} · biaya +${o.haircut.toFixed(1)} pip · gap ${(o.gapProb*100).toFixed(1)}% ×${o.gapMult} · seed ${o.seed} · ${LIVE.ms.toFixed(0)} ms`;
+  const kp = (l, v, s) => `<div class="card kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="small">${s}</div></div>`;
+  $("#sKpi").innerHTML = kp("Net profit P50", fmtK(lp("net_profit", 50)), `P5 ${fmtK(lp("net_profit", 5))} · P95 ${fmtK(lp("net_profit", 95))}`)
+    + kp("Win rate P50", pctS(lp("win_rate", 50)), `P5 ${f1(lp("win_rate", 5))}% · P95 ${f1(lp("win_rate", 95))}%`)
+    + kp("Profit factor P50", f2(lp("profit_factor", 50)), `P5 ${f2(lp("profit_factor", 5))} · P95 ${f2(lp("profit_factor", 95))}`)
+    + kp("Sharpe P50", f2(lp("sharpe", 50)), `P5 ${f2(lp("sharpe", 5))} · Sortino P50 ${f2(lp("sortino", 50))}`)
+    + kp("Max DD % peak (MAE) P95", f1(lp("max_dd_mae_pct", 95)) + "%", `P50 ${f1(lp("max_dd_mae_pct", 50))}% · $ P95 ${fmtK(lp("max_dd_mae_usd", 95))}`)
+    + kp("Equity akhir P50", fmtK(lp("final_equity", 50)), `ditarik P50 ${fmtK(lp("total_withdrawn", 50))} · tahun terburuk P5 ${f1(lp("worst_year_pct", 5))}%`)
+    + kp("Max cons loss P95", f0(lp("max_cons_losses", 95)), `P50 ${f0(lp("max_cons_losses", 50))} · win P50 ${f0(lp("max_cons_wins", 50))}`)
+    + kp("CAGR equity P50 · eq+tarikan P50", pctS(lp("cagr_equity", 50)) + ` <span style="font-size:15px;color:var(--muted)">· ${pctS(lp("cagr_wealth", 50))}</span>`, `equity P5 ${f1(lp("cagr_equity", 5))}% · P95 ${f1(lp("cagr_equity", 95))}% · eq+tarikan P5 ${f1(lp("cagr_wealth", 5))}%`);
+  drawProb();
+  // fan
+  const H = res.H, b = res.bands, act = LIVE.act.samples[0];
+  const dates = LIVE.pool.date; const xt = []; if (H === LIVE.pool.N) { let ly = ""; for (let i = 0; i < H; i++) { const y = dates[i].slice(0, 4); if (y !== ly && (+y) % 2 === (H > 600 ? 1 : 0)) xt.push([i, y]); ly = y; } }
+  else { const st = Math.max(1, Math.round(H / 8)); for (let i = 0; i < H; i += st) xt.push([i, "#" + (i + 1)]); }
+  lineChart($("#sFan"), {n: H, height: 340, yFmt: fmtK, xTicks: xt,
+    bands: [{lo: b[5], hi: b[95], color: css("--band1")}, {lo: b[25], hi: b[75], color: css("--band2")}],
+    extra: res.samples.slice(0, 25).map(sm => ({values: Array.from(sm), color: css("--muted"), op: .28, w: .8})),
+    series: [{values: Array.from(b[50]), color: css("--is"), w: 2.2}, {values: Array.from(act), color: css("--accent"), w: 1.6}, {values: Array.from(b[5]), color: css("--bad"), w: 1, dash: "4 3"}, {values: Array.from(b[95]), color: css("--good"), w: 1, dash: "4 3"}],
+    tip: i => `<b>Trade #${i + 1}</b>${H === LIVE.pool.N ? " · slot " + dates[i] : ""}<br>P95 ${fmtMoney(b[95][i])}<br>P75 ${fmtMoney(b[75][i])}<br><b>P50 ${fmtMoney(b[50][i])}</b><br>P25 ${fmtMoney(b[25][i])}<br>P5 ${fmtMoney(b[5][i])}<br><span style="opacity:.8">aktual ${fmtMoney(act[i])}</span>`});
+  drawHist(); drawLiveTable();
+}
+function drawProb(){
+  const cap = LIVE.o.cap, dd = +$("#sDDth").value, tg = +$("#sTgt").value, cl = +$("#sCLth").value;
+  const pn = prob("net_profit", v => v <= 0), pd = prob("max_dd_init_pct", v => v >= dd), pt = prob("net_profit", v => v >= tg / 100 * cap), pc = prob("max_cons_losses", v => v >= cl);
+  const pw = prob("win_rate", v => v < 50);
+  const c = (l, v, cls, s) => `<div class="card kpi"><div class="lab">${l}</div><div class="val"><span class="pill ${cls}" style="font-size:18px">${(v*100).toFixed(1)}%</span></div><div class="small">${s}</div></div>`;
+  $("#sProb").innerHTML = c(`P(DD incl. MAE ≥ ${dd}% modal)`, pd, pd > .25 ? "bad" : pd > .05 ? "warn" : "good", `= DD ≥ ${fmtMoney(dd / 100 * cap)}`)
+    + c(`P(net ≥ ${tg}% modal)`, pt, pt > .75 ? "good" : pt > .4 ? "warn" : "bad", `= net ≥ ${fmtMoney(tg / 100 * cap)} dalam ${LIVE.res.H} trade`)
+    + c(`P(net ≤ 0)`, pn, pn > .1 ? "bad" : pn > .02 ? "warn" : "good", `rugi di akhir horizon`)
+    + c(`P(max cons loss ≥ ${cl})`, pc, pc > .25 ? "bad" : pc > .05 ? "warn" : "good", `streak × risk = ${(cl * LIVE.o.riskPct).toFixed(1)}% ${LIVE.o.policy === "fixed" ? "modal" : "equity awal tahun"}`)
+    + c(`P(win rate < 50%)`, pw, "warn", `win rate P50 ${f1(lp("win_rate", 50))}%`)
+    + c(`P(PF < 1)`, prob("profit_factor", v => v < 1), prob("profit_factor", v => v < 1) > .05 ? "bad" : "good", `PF P5 ${f2(lp("profit_factor", 5))}`);
+}
+function drawHist(){
+  const k = $("#sHistMet").value, m = METK[k], hp = +$("#sHistPct").value; $("#sHistPctLab").textContent = "P" + hp;
+  const s = LIVE.sorted[k].filter(isFinite); const lo = s[0], hi = s[s.length - 1];
+  const integer = ["max_cons_losses", "max_cons_wins"].includes(k);
+  let edges = [], counts = [];
+  if (integer) { for (let v = lo - .5; v <= hi + .5; v += 1) edges.push(v); }
+  else { const nb = 45, w = (hi - lo) / nb || 1; for (let i = 0; i <= nb; i++) edges.push(lo + i * w); }
+  counts = new Array(edges.length - 1).fill(0); const w0 = edges[1] - edges[0];
+  for (const v of s) { let i = Math.floor((v - edges[0]) / w0); if (i >= counts.length) i = counts.length - 1; if (i < 0) i = 0; counts[i]++; }
+  const actv = LIVE.act.metrics[k][0];
+  histChart($("#sHist"), {edges, counts, xFmt: m.f, height: 360, color: css("--is"),
+    vlines: [{x: lp(k, hp), color: css("--accent"), label: "P" + hp + " " + m.f(lp(k, hp))}, {x: actv, color: css("--ink"), label: "aktual " + m.f(actv), dash: "4 3"}]});
+}
+function drawLiveTable(){
+  const mets = MET.filter(m => !m.derived && !(m.k === "max_dd_init_pct" && LIVE.o.policy !== "fixed")); const head = ["Pct", ...mets.map(m => m.t)];
+  const rows = PCTS.map(p => ["P" + p, ...mets.map(m => m.f(lp(m.k, p)))]); rows.push(["mean", ...mets.map(m => m.f(mean(LIVE.res.metrics[m.k])))]);
+  rows.push(["aktual", ...mets.map(m => m.f(LIVE.act.metrics[m.k][0]))]);
+  table($("#sTable"), head, rows, {rowClass: i => i >= 19 ? "mean" : [0, 9, 18].includes(i) ? "key" : ""});
+}
+
+// ---------------------------------------------------------------- CROSS-CHECK
+const xcSeg = seg("#xcSeg", () => renderXC());
+function renderXC(){
+  const x = C.cross_check[xcSeg()];
+  table($("#xcTable"), ["Metrik", "Tail buruk", "Aktual", "Boot P5", "Boot P50", "Boot P95", "Rank aktual", ""],
+    x.rows.map(r => { const m = METK[r.metric] || {f: f2}; const out = r.rank_pct < 5 || r.rank_pct > 95;
+      return [r.title, r.bad_tail === "low" ? "rendah" : "tinggi", m.f(r.actual), m.f(r.p5), m.f(r.p50), m.f(r.p95),
+        `<span class="pill ${out ? "bad" : "good"}">${f1(r.rank_pct)}%</span>`, `<div class="rankbar"><b style="left:calc(${Math.max(0, Math.min(100, r.rank_pct))}% - 1px)"></b></div>`]; }));
+  const hc = C.cost_stress.IS.rows.map(r => r.haircut_pips);
+  const n = hc.length;
+  lineChart($("#costChart"), {n, width: 600, height: 380, yFmt: fmtK, xTicks: hc.map((h, i) => [i, "+" + h.toFixed(1) + " pip"]),
+    bands: [{lo: C.cost_stress.IS.rows.map(r => r.resample_net_p5), hi: C.cost_stress.IS.rows.map(r => r.resample_net_p95), color: css("--band1")},
+            {lo: C.cost_stress.OOS.rows.map(r => r.resample_net_p5), hi: C.cost_stress.OOS.rows.map(r => r.resample_net_p95), color: "color-mix(in srgb, var(--oos) 14%, transparent)"}],
+    series: [{values: C.cost_stress.IS.rows.map(r => r.resample_net_p50), color: css("--is")}, {values: C.cost_stress.OOS.rows.map(r => r.resample_net_p50), color: css("--oos")}],
+    hlines: [{y: 0, color: css("--bad"), label: "0"}],
+    tip: i => ["IS", "OOS"].map(k => { const r = C.cost_stress[k].rows[i]; return `<b>${k} +${r.haircut_pips} pip</b>: net ${fmtK(r.net_usd)}, PF ${f2(r.profit_factor)}, WR ${f1(r.win_rate)}%, t ${f2(r.t_pips)}<br>P5/50/95 ${fmtK(r.resample_net_p5)} / ${fmtK(r.resample_net_p50)} / ${fmtK(r.resample_net_p95)} · P(net≤0) ${f1(r.p_net_le_0*100)}%`; }).join("<br>")});
+  table($("#costTable"), ["+pip", "Split", "Net", "PF", "WR", "pip/trade", "t", "P5 net", "P(net≤0)"],
+    hc.flatMap((h, i) => ["IS", "OOS"].map(k => { const r = C.cost_stress[k].rows[i]; return [f1(h), k, fmtK(r.net_usd), f2(r.profit_factor), f1(r.win_rate) + "%", f2(r.mean_pips),
+      `<span class="pill ${r.t_pips >= 2 ? "good" : "bad"}">${f2(r.t_pips)}</span>`, fmtK(r.resample_net_p5), f1(r.p_net_le_0 * 100) + "%"]; })));
+  $("#costNote").innerHTML = `t &lt; 2 setelah biaya tambahan IS ${f2(C.cost_stress.IS.haircut_for_t_below_2_pips)} pip / OOS ${f2(C.cost_stress.OOS.haircut_for_t_below_2_pips)} pip. Breakeven di ${f2(C.cost_stress.IS.breakeven_haircut_pips)} / ${f2(C.cost_stress.OOS.breakeven_haircut_pips)} pip. Spread USDJPY 09:55 JST biasanya 0,2–1 pip, dan stop dipicu di ask (tidak dimodelkan TradingView).`;
+  const d = k => C.splits[k].descriptive;
+  table($("#compTable"), ["Split", "Exit reasons", "Win terbesar", "Loss terbesar", "MAE terburuk", "Top-10 share net", "Net tanpa top 10", "Net tanpa top 20", "Tahun terbaik / top-2", "Trade di cap 20 lot", "Harga min–max"],
+    ["IS", "OOS"].map(k => [SPL[k], Object.entries(d(k).exit_reasons).map(([a, b]) => `${a}: ${typeof b === "object" ? b.n ?? JSON.stringify(b) : b}`).join("; "), fmtMoney(d(k).largest_win), fmtMoney(d(k).largest_loss), fmtMoney(d(k).worst_mae),
+      f0(d(k).top10_share_pct) + "%", fmtK(d(k).net_ex_top10), fmtK(d(k).net_ex_top20), f0(d(k).best_year_share_pct) + "% / " + f0(d(k).top2_years_share_pct) + "%", d(k).trades_at_20_lot_cap, f1(d(k).price_min) + "–" + f1(d(k).price_max)]));
+}
+
+// ---------------------------------------------------------------- ASUMSI
+function renderLim(){
+  const L = [
+    "<b>Data:</b> trade list TradingView (OANDA:USDJPY 5m), satu seri harga. Stop short tidak memperhitungkan spread ask, jadi stop-out dan exit terlihat lebih bagus sekitar satu spread. Bar detalization default (4 tick/bar), tanpa bar magnifier.",
+    "<b>Sizing:</b> 2% dari modal AWAL $100k (tidak compounding), cap 20 lot. P&amp;L $ per trade bisa dijumlahkan, jadi resample $ valid. Cap sering mengikat, sehingga risk efektif di bawah 2% dan bervariasi dengan harga USDJPY (±76–160). Di simulator, sizing diskalakan linear (risk$/2000).",
+    "<b>Metode:</b> resample iid with replacement (N = jumlah trade split), shuffle (permutasi), stationary block bootstrap (rata-rata 10 trade). Slot kalender = tanggal entry asli split, jadi return bulanan ikut berubah saat shuffle. Sharpe/Sortino dari return bulanan (semua bulan kalender, rf 0) × √12.",
+    "<b>Win:</b> net P&amp;L &gt; 0 (setelah komisi). Breakeven win rate = avg loss / (avg win + avg loss), mengasumsikan payoff tetap.",
+    "<b>Ekor risiko:</b> resample N trade tidak bisa menghasilkan loss lebih buruk dari trade terburuk yang teramati. Gunakan gap shock di Simulator. DD closed-trade menyembunyikan floating DD; versi “incl. MAE” memakai adverse excursion per trade.",
+    "<b>Paparan data:</b> 2016–2026 bukan OOS bersih (riset proyek sebelumnya sudah membaca 2015–2026 untuk rule ini, dan SOLOMON tuning di 2020–21). 2005–2014 belum pernah dibaca riset proyek.",
+    "<b>Regime:</b> Sharpe IS aktual ada di percentile ke-3 distribusi shuffle, jadi bulan baik/buruk bergerombol (2012–2015 datar). Band iid meremehkan risiko masa datar bertahun-tahun.",
+    "<b>Bukan rekomendasi sizing</b> untuk akun prop $50k (daily 3%, trailing 6%). Prop check terpisah belum dijalankan.",
+    "<b>Simulator live</b> memakai RNG sfc32 (bukan PCG64 numpy), jadi angkanya berbeda sedikit dari tabel kanonik karena noise MC. Definisi metrik identik (diverifikasi di node terhadap results.json).",
+  ];
+  $("#limList").innerHTML = L.map(x => `<li style="margin:6px 0">${x}</li>`).join("");
+  const pc = C.parse_checks; const ks = Object.keys(pc);
+  const fields = ["file", "closed_trades_parsed", "tv_total_trades", "sum_net_pnl", "last_cumulative_pnl", "open_trades_skipped", "est_entries", "edt_entries", "tv_close_to_close_max_dd", "tv_intrabar_max_dd", "tv_sharpe", "tv_sortino", "tv_win_pct", "same_bar_stopouts"];
+  table($("#parseTable"), ["Field", ...ks], fields.map(f => [f, ...ks.map(k => { const v = pc[k][f]; return typeof v === "number" ? (Number.isInteger(v) ? v : v.toFixed(2)) : String(v); })]));
+}
+
+// ---------------------------------------------------------------- boot
+const h = new URLSearchParams(location.hash.slice(1));
+setTab(h.get("tab") || "sum");
+</script>
+</body>
+</html>

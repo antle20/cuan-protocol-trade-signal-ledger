@@ -276,12 +276,12 @@ export function buildTradeDataset(trades, sourceName = 'Uploaded Data', sampleTa
   const grossLoss = Math.abs(losses.reduce((a, b) => a + b, 0));
 
   const totalTrades = sortedTrades.length;
-  const winRate = (wins.length / totalTrades) * 100;
+  const winRate = totalTrades > 0 ? (wins.length / totalTrades) * 100 : 0;
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0;
-  const avgR = R.reduce((a, b) => a + b, 0) / totalTrades;
+  const avgR = totalTrades > 0 ? R.reduce((a, b) => a + b, 0) / totalTrades : 0;
 
-  const startDate = sortedTrades[0].date;
-  const endDate = sortedTrades[sortedTrades.length - 1].date;
+  const startDate = sortedTrades.length > 0 ? sortedTrades[0].date : new Date();
+  const endDate = sortedTrades.length > 0 ? sortedTrades[sortedTrades.length - 1].date : new Date();
 
   const totalMonths = Math.max(
     1,
@@ -290,25 +290,84 @@ export function buildTradeDataset(trades, sourceName = 'Uploaded Data', sampleTa
 
   const month_idx = [];
   const year_idx = [];
-  for (const t of sortedTrades) {
+  const dateStrings = [];
+  const pnl = [];
+  const mae = [];
+  const qty = [];
+  const px_in = [];
+  const px_out = [];
+  const is_sl = [];
+  const pips = [];
+  const stop_usd = [];
+  const uniqueYearsSet = new Set();
+  const uniqueMonthsSet = new Set();
+
+  // Reference 1R risk USD
+  const dollarLosses = profits.filter((p) => p < 0).map((p) => Math.abs(p));
+  dollarLosses.sort((a, b) => a - b);
+  const medianLossUsd = dollarLosses.length > 0 ? dollarLosses[Math.floor(dollarLosses.length / 2)] : 1000;
+
+  for (let i = 0; i < sortedTrades.length; i++) {
+    const t = sortedTrades[i];
     const m = (t.date.getFullYear() - startDate.getFullYear()) * 12 + t.date.getMonth();
     const y = t.date.getFullYear() - startDate.getFullYear();
     month_idx.push(m);
     year_idx.push(y);
+
+    const yVal = t.date.getFullYear();
+    const mVal = `${yVal}-${String(t.date.getMonth() + 1).padStart(2, '0')}`;
+    const dVal = `${mVal}-${String(t.date.getDate()).padStart(2, '0')}`;
+    uniqueYearsSet.add(yVal);
+    uniqueMonthsSet.add(mVal);
+    dateStrings.push(dVal);
+
+    pnl.push(t.profit);
+    pips.push(t.pips !== undefined && t.pips !== null ? t.pips : t.r * 10);
+    qty.push(t.volume || 1);
+    px_in.push(t.entryPrice || 100);
+    px_out.push(t.exitPrice || 100);
+
+    const isLoss = t.profit < 0;
+    is_sl.push(isLoss);
+    stop_usd.push(medianLossUsd);
+
+    // Adverse Excursion (MAE <= 0):
+    // If trade lost money, MAE is at least the loss amount.
+    // If trade won, MAE represents drawdown dip before win (approximated as 30% of 1R risk if not logged).
+    if (t.mae !== undefined && t.mae !== null) {
+      mae.push(t.mae <= 0 ? t.mae : -t.mae);
+    } else {
+      mae.push(isLoss ? Math.min(t.profit, -medianLossUsd) : -0.3 * medianLossUsd);
+    }
   }
+
+  const years = Array.from(uniqueYearsSet).sort((a, b) => a - b);
+  const months = Array.from(uniqueMonthsSet).sort();
 
   return {
     sourceName,
     sampleTag,
     trades: sortedTrades,
+    N: totalTrades,
+    M: totalMonths,
     R,
     profits,
     dates,
     month_idx,
     year_idx,
+    date: dateStrings,
+    pnl,
+    mae,
+    qty,
+    px_in,
+    px_out,
+    is_sl,
+    pips,
+    stop_usd,
+    years,
+    months,
     startDate,
     endDate,
-    M: totalMonths,
     stats: {
       totalTrades,
       winsCount: wins.length,
